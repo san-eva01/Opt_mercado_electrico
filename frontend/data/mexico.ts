@@ -1,66 +1,60 @@
-export const ESTADOS: string[] = ["Aguascalientes","Baja California","Baja California Sur","Campeche","Chiapas","Chihuahua","Ciudad de México","Coahuila","Colima","Durango","Estado de México","Guanajuato","Guerrero","Hidalgo",
-  "Jalisco","Michoacán","Morelos","Nayarit","Nuevo León","Oaxaca","Puebla","Querétaro","Quintana Roo","San Luis Potosí","Sinaloa","Sonora","Tabasco","Tamaulipas","Tlaxcala","Veracruz","Yucatán",
-"Zacatecas"];
-
-//este es un diccionario que mapea cada estado a una lista de sus municipios, esto es solo un ejemplo y no incluye todos los estados ni municipios reales
-
 export const MUNICIPIOS: Record<string, string[]> = {
   "Aguascalientes": [
     "Aguascalientes",
     "Asientos",
     "Calvillo",
-    "Cosio",
+    "Cosío",
     "El Llano",
-    "Jesus Maria",
-    "Pabellon De Arteaga",
-    "Rincon De Romos",
-    "San Francisco De Los Romo",
-    "Tepezala"
+    "Jesús María",
+    "Pabellón de Arteaga",
+    "Rincón de Romos",
+    "San Francisco de los Romo",
+    "Tepezalá"
   ],
 
   "Baja California": [
     "Ensenada",
     "Mexicali",
-    "Playas De Rosarito",
+    "Playas de Rosarito",
     "Tecate",
     "Tijuana"
   ],
 
   "Baja California Sur": [
-    "Comondu",
+    "Comondú",
     "La Paz",
     "Los Cabos",
-    "Mulege"
+    "Mulegé"
   ],
 
   "Campeche": [
     "Campeche",
     "Carmen",
-    "Champoton",
-    "Escarcega"
+    "Champotón",
+    "Escárcega"
   ],
 
   "Chiapas": [
     "Arriaga",
-    "Berriozabal",
-    "Cacahoatan",
-    "Chiapa De Corzo",
-    "Chicoasen",
-    "Comitan De Dominguez",
+    "Berriozábal",
+    "Cacahoatán",
+    "Chiapa de Corzo",
+    "Chicoasén",
+    "Comitán de Domínguez",
     "Frontera Comalapa",
-    "Huehuetan",
+    "Huehuetán",
     "Huixtla",
     "La Concordia",
-    "Mazatan",
+    "Mazatán",
     "Ocosingo",
     "Palenque",
     "Pichucalco",
     "Pijijiapan",
     "Reforma",
-    "San Cristobal De Las Casas",
+    "San Cristóbal de las Casas",
     "Tapachula",
     "Tonalá",
-    "Tuxtla Gutierrez",
+    "Tuxtla Gutiérrez",
     "Venustiano Carranza",
     "Villa Corzo",
     "Villaflores"
@@ -71,31 +65,31 @@ export const MUNICIPIOS: Record<string, string[]> = {
     "Aldama",
     "Camargo",
     "Chihuahua",
-    "Cuauhtemoc",
+    "Cuauhtémoc",
     "Delicias",
     "Guadalupe",
-    "Hidalgo Del Parral",
-    "Juarez",
+    "Hidalgo del Parral",
+    "Juárez",
     "Madera",
     "Meoqui",
     "Nuevo Casas Grandes",
     "Ojinaga"
   ],
 
-  "Ciudad De Mexico": [
-    "Alvaro Obregon",
+  "Ciudad de México": [
+    "Álvaro Obregón",
     "Azcapotzalco",
-    "Benito Juarez",
-    "Coyoacan",
-    "Cuajimalpa De Morelos",
-    "Cuauhtemoc",
+    "Benito Juárez",
+    "Coyoacán",
+    "Cuajimalpa de Morelos",
+    "Cuauhtémoc",
     "Gustavo A. Madero",
     "Iztacalco",
     "Iztapalapa",
     "La Magdalena Contreras",
     "Miguel Hidalgo",
     "Milpa Alta",
-    "Tlahuac",
+    "Tláhuac",
     "Tlalpan",
     "Venustiano Carranza",
     "Xochimilco"
@@ -107,134 +101,134 @@ export const MUNICIPIOS: Record<string, string[]> = {
     "Frontera",
     "Matamoros",
     "Monclova",
-    "Muzquiz",
+    "Múzquiz",
     "Nava",
     "Piedras Negras",
     "Ramos Arizpe",
     "Sabinas",
     "Saltillo",
-    "San Juan De Sabinas",
+    "San Juan de Sabinas",
     "San Pedro",
-    "Torreon"
+    "Torreón"
   ],
 
   "Colima": [
-    "Armeria",
+    "Armería",
     "Colima",
     "Manzanillo",
-    "Tecoman",
-    "Villa De Alvarez"
+    "Tecomán",
+    "Villa de Álvarez"
   ],
 
   "Durango": [
-    "Canatlan",
+    "Canatlán",
     "Durango",
-    "Gomez Palacio",
+    "Gómez Palacio",
     "Lerdo",
-    "Mapimi",
+    "Mapimí",
     "Pueblo Nuevo",
     "Santiago Papasquiaro"
   ],
 
-  "Estado De Mexico": [
-    "Almoloya De Juarez",
+  "Estado de México": [
+    "Almoloya de Juárez",
     "Atlacomulco",
-    "Coacalco De Berriozabal",
-    "Cuautitlan Izcalli",
-    "Ecatepec De Morelos",
+    "Coacalco de Berriozábal",
+    "Cuautitlán Izcalli",
+    "Ecatepec de Morelos",
     "Jilotepec",
     "Lerma",
     "Metepec",
-    "Naucalpan De Juarez",
-    "Nezahualcoyotl",
-    "Nicolas Romero",
-    "Tecamac",
+    "Naucalpan de Juárez",
+    "Nezahualcóyotl",
+    "Nicolás Romero",
+    "Tecámac",
     "Teoloyucan",
     "Texcoco",
-    "Tlalnepantla De Baz",
+    "Tlalnepantla de Baz",
     "Toluca",
-    "Tultitlan",
-    "Valle De Bravo"
+    "Tultitlán",
+    "Valle de Bravo"
   ],
 
   "Guanajuato": [
     "Abasolo",
-    "Acambaro",
-    "Apaseo El Alto",
+    "Acámbaro",
+    "Apaseo el Alto",
     "Celaya",
     "Comonfort",
     "Cortazar",
     "Dolores Hidalgo",
     "Guanajuato",
     "Irapuato",
-    "Leon",
+    "León",
     "Pueblo Nuevo",
     "Salamanca",
-    "San Francisco Del Rincon",
-    "San Jose Iturbide",
-    "San Luis De La Paz",
-    "San Miguel De Allende",
+    "San Francisco del Rincón",
+    "San José Iturbide",
+    "San Luis de la Paz",
+    "San Miguel de Allende",
     "Silao",
     "Uriangato",
-    "Valle De Santiago"
+    "Valle de Santiago"
   ],
 
   "Guerrero": [
-    "Acapulco De Juarez",
-    "Chilpancingo De Los Bravo",
-    "Coyuca De Benitez",
-    "Iguala De La Independencia",
-    "Petatlan",
-    "Taxco De Alarcon",
-    "Zihuatanejo De Azueta"
+    "Acapulco de Juárez",
+    "Chilpancingo de los Bravo",
+    "Coyuca de Benítez",
+    "Iguala de la Independencia",
+    "Petatlán",
+    "Taxco de Alarcón",
+    "Zihuatanejo de Azueta"
   ],
 
   "Hidalgo": [
     "Actopan",
     "Apan",
     "Atitalaquia",
-    "Huejutla De Reyes",
+    "Huejutla de Reyes",
     "Ixmiquilpan",
-    "Mineral De La Reforma",
-    "Pachuca De Soto",
+    "Mineral de la Reforma",
+    "Pachuca de Soto",
     "Tepeapulco",
-    "Tepeji Del Rio De Ocampo",
+    "Tepeji del Río de Ocampo",
     "Tizayuca",
     "Tlaxcoapan",
-    "Tula De Allende",
-    "Tulancingo De Bravo"
+    "Tula de Allende",
+    "Tulancingo de Bravo"
   ],
 
   "Jalisco": [
     "Arandas",
-    "Autlan De Navarro",
+    "Autlán de Navarro",
     "El Salto",
-    "Encarnacion De Diaz",
+    "Encarnación de Díaz",
     "Guadalajara",
     "Jamay",
     "La Barca",
-    "Lagos De Moreno",
-    "Ocotlan",
+    "Lagos de Moreno",
+    "Ocotlán",
     "Puerto Vallarta",
-    "Tepatitlan De Morelos",
-    "Tlajomulco De Zuñiga",
-    "Tlaquepaque",
+    "Tepatitlán de Morelos",
+    "Tlajomulco de Zúñiga",
+    "San Pedro Tlaquepaque",
     "Tonalá",
     "Zapopan"
   ],
 
-  "Michoacan": [
-    "Apatzingan",
+  "Michoacán": [
+    "Apatzingán",
     "Hidalgo",
     "La Piedad",
-    "Lazaro Cardenas",
+    "Lázaro Cárdenas",
     "Morelia",
-    "Patzcuaro",
+    "Pátzcuaro",
     "Sahuayo",
     "Uruapan",
     "Zacapu",
     "Zamora",
-    "Zitacuaro"
+    "Zitácuaro"
   ],
 
   "Morelos": [
@@ -251,29 +245,29 @@ export const MUNICIPIOS: Record<string, string[]> = {
   ],
 
   "Nayarit": [
-    "Bahia De Banderas",
+    "Bahía de Banderas",
     "Compostela",
     "Santiago Ixcuintla",
     "Tepic"
   ],
 
-  "Nuevo Leon": [
+  "Nuevo León": [
     "Apodaca",
-    "Cadereyta Jimenez",
+    "Cadereyta Jiménez",
     "General Escobedo",
     "Guadalupe",
-    "Juarez",
+    "Juárez",
     "Monterrey",
-    "Pesqueria",
+    "Pesquería",
     "Salinas Victoria",
-    "San Nicolas De Los Garza",
-    "San Pedro Garza Garcia",
+    "San Nicolás de los Garza",
+    "San Pedro Garza García",
     "Santa Catarina"
   ],
 
   "Oaxaca": [
-    "Heroica Ciudad De Juchitan De Zaragoza",
-    "Oaxaca De Juarez",
+    "Heroica Ciudad de Juchitán de Zaragoza",
+    "Oaxaca de Juárez",
     "Salina Cruz",
     "San Juan Bautista Tuxtepec",
     "Santo Domingo Tehuantepec"
@@ -283,41 +277,41 @@ export const MUNICIPIOS: Record<string, string[]> = {
     "Amozoc",
     "Atlixco",
     "Huejotzingo",
-    "Izucar De Matamoros",
+    "Izúcar de Matamoros",
     "Puebla",
-    "San Andres Cholula",
-    "San Martin Texmelucan",
-    "Tehuacan",
-    "Teziutlan"
+    "San Andrés Cholula",
+    "San Martín Texmelucan",
+    "Tehuacán",
+    "Teziutlán"
   ],
 
-  "Queretaro": [
+  "Querétaro": [
     "Corregidora",
-    "El Marques",
+    "El Marqués",
     "Pedro Escobedo",
-    "Queretaro",
-    "San Juan Del Rio"
+    "Querétaro",
+    "San Juan del Río"
   ],
 
   "Quintana Roo": [
-    "Benito Juarez",
+    "Benito Juárez",
     "Cozumel",
     "Isla Mujeres",
-    "Othon P. Blanco",
+    "Othón P. Blanco",
     "Solidaridad",
     "Tulum"
   ],
 
-  "San Luis Potosi": [
+  "San Luis Potosí": [
     "Cedral",
     "Charcas",
-    "Ciudad Fernandez",
+    "Ciudad Fernández",
     "Matehuala",
     "Rioverde",
-    "San Luis Potosi",
-    "Soledad De Graciano Sanchez",
+    "San Luis Potosí",
+    "Soledad de Graciano Sánchez",
     "Tamazunchale",
-    "Villa De Reyes",
+    "Villa de Reyes",
     "Villa Hidalgo"
   ],
 
@@ -325,18 +319,18 @@ export const MUNICIPIOS: Record<string, string[]> = {
     "Ahome",
     "Angostura",
     "Concordia",
-    "Culiacan",
+    "Culiacán",
     "El Fuerte",
     "Escuinapa",
     "Guasave",
-    "Mazatlan",
+    "Mazatlán",
     "Navolato",
     "Salvador Alvarado"
   ],
 
   "Sonora": [
     "Agua Prieta",
-    "Alamos",
+    "Álamos",
     "Caborca",
     "Cajeme",
     "Cananea",
@@ -348,17 +342,17 @@ export const MUNICIPIOS: Record<string, string[]> = {
     "Navojoa",
     "Nogales",
     "Puerto Peñasco",
-    "San Luis Rio Colorado"
+    "San Luis Río Colorado"
   ],
 
   "Tabasco": [
-    "Cardenas",
+    "Cárdenas",
     "Centro",
     "Comalcalco",
-    "Cunduacan",
+    "Cunduacán",
     "Huimanguillo",
     "Macuspana",
-    "Paraiso"
+    "Paraíso"
   ],
 
   "Tamaulipas": [
@@ -366,10 +360,10 @@ export const MUNICIPIOS: Record<string, string[]> = {
     "Ciudad Madero",
     "El Mante",
     "Matamoros",
-    "Miguel Aleman",
+    "Miguel Alemán",
     "Nuevo Laredo",
     "Reynosa",
-    "Rio Bravo",
+    "Río Bravo",
     "Tampico",
     "Victoria"
   ],
@@ -384,25 +378,25 @@ export const MUNICIPIOS: Record<string, string[]> = {
 
   "Veracruz": [
     "Alvarado",
-    "Boca Del Rio",
+    "Boca del Río",
     "Coatzacoalcos",
-    "Cordoba",
+    "Córdoba",
     "Cosoleacaque",
-    "Martinez De La Torre",
-    "Minatitlan",
+    "Martínez de la Torre",
+    "Minatitlán",
     "Orizaba",
-    "Poza Rica De Hidalgo",
-    "Tihuatlan",
+    "Poza Rica de Hidalgo",
+    "Tihuatlán",
     "Tuxpan",
     "Veracruz",
     "Xalapa"
   ],
 
-  "Yucatan": [
-    "Kanasin",
-    "Merida",
+  "Yucatán": [
+    "Kanasín",
+    "Mérida",
     "Progreso",
-    "Tizimin",
+    "Tizimín",
     "Valladolid"
   ],
 
@@ -411,9 +405,10 @@ export const MUNICIPIOS: Record<string, string[]> = {
     "Fresnillo",
     "Guadalupe",
     "Jerez",
-    "Rio Grande",
+    "Río Grande",
     "Sombrerete",
     "Zacatecas"
   ]
 };
 
+export const ESTADOS: string[] = Object.keys(MUNICIPIOS).sort();

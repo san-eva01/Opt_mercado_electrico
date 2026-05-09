@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { useEffect, useRef } from "react";
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
+// @ts-ignore
 import "leaflet/dist/leaflet.css";
 
-// Fix para el ícono por defecto de Leaflet en Next.js
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -13,8 +13,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// Ícono personalizado amarillo para el pin
-const yellowIcon = new L.Icon({
+const pinIcon = new L.Icon({
   iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [25, 41],
@@ -23,7 +22,24 @@ const yellowIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-// ── Sub-componente que captura clics en el mapa ────────────────────────────
+// Sub-componente que mueve el mapa cuando cambia el centro
+function MapController({ center }: { center: { lat: number; lon: number; zoom: number } }) {
+  const map = useMap();
+  const prevCenter = useRef(center);
+
+  useEffect(() => {
+    if (
+      center.lat !== prevCenter.current.lat ||
+      center.lon !== prevCenter.current.lon
+    ) {
+      map.flyTo([center.lat, center.lon], center.zoom, { duration: 1.2 });
+      prevCenter.current = center;
+    }
+  }, [center, map]);
+
+  return null;
+}
+
 function ClickHandler({ onLocationSelect }: { onLocationSelect: (lat: number, lon: number) => void }) {
   useMapEvents({
     click(e) {
@@ -33,49 +49,33 @@ function ClickHandler({ onLocationSelect }: { onLocationSelect: (lat: number, lo
   return null;
 }
 
-// ── Props ──────────────────────────────────────────────────────────────────
 interface MapSelectorProps {
   onLocationSelect: (lat: number, lon: number) => void;
   lat: number | null;
   lon: number | null;
+  center: { lat: number; lon: number; zoom: number };
 }
 
-// ── Componente principal ───────────────────────────────────────────────────
-export default function MapSelector({ onLocationSelect, lat, lon }: MapSelectorProps) {
-  // Centro aproximado de México
-  const CENTER: [number, number] = [23.5, -102.5];
-  const ZOOM = 5;
-
-  useEffect(() => {
-    // Asegurar que Leaflet se inicializa correctamente sin SSR
-    if (typeof window !== "undefined") {
-      import("leaflet");
-    }
-  }, []);
-
+export default function MapSelector({ onLocationSelect, lat, lon, center }: MapSelectorProps) {
   return (
     <MapContainer
-      center={CENTER}
-      zoom={ZOOM}
-      style={{ width: "100%", height: "100%", background: "#071828" }}
-      // Limitar el panning a la región de México aproximadamente
-      maxBounds={[
-        [14.0, -120.0],
-        [33.5, -85.0],
-      ]}
+      center={[center.lat, center.lon]}
+      zoom={center.zoom}
+      style={{ width: "100%", height: "100%" }}
+      maxBounds={[[14.0, -120.0], [33.5, -85.0]]}
       maxBoundsViscosity={0.8}
     >
-      {/* Tiles oscuros de CartoDB para mantener la estética del dashboard */}
+      {/* Tiles claros de OpenStreetMap estándar */}
       <TileLayer
-        attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
+      <MapController center={center} />
       <ClickHandler onLocationSelect={onLocationSelect} />
 
-      {/* Mostrar pin si hay coordenadas seleccionadas */}
       {lat !== null && lon !== null && (
-        <Marker position={[lat, lon]} icon={yellowIcon} />
+        <Marker position={[lat, lon]} icon={pinIcon} />
       )}
     </MapContainer>
   );
