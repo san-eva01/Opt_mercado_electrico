@@ -155,7 +155,7 @@ async def get_solar_data(req: SolarRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
     # Preparar respuesta: índice datetime como string para serialización JSON
-    df_preview = df.head(24).copy()
+    df_preview = df.copy()
     df_preview.index = df_preview.index.strftime("%Y-%m-%d %H:%M")
 
     return SolarResponse(

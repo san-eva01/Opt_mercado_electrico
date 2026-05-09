@@ -2,11 +2,15 @@
 
 import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer
+} from "recharts";
 
 const MapSelector = dynamic(() => import("../components/MapSelector"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex items-center justify-center text-[#4a7fa8] text-sm">
+    <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
       Cargando mapa...
     </div>
   ),
@@ -69,28 +73,50 @@ export default function Home() {
     }
   };
 
+  // Preparar datos para la gráfica
+  const chartData = result?.preview.map((row) => ({
+    hora: row["datetime"] as string,
+    irradiancia: row["ALLSKY_SFC_SW_DWN"] === -999 ? null : (row["ALLSKY_SFC_SW_DWN"] as number),
+  })) ?? [];
+
   return (
-    <main className="min-h-screen bg-[#0a0f1e] text-white font-mono">
-      <header className="border-b border-[#1e3a5f] px-8 py-5 flex items-center gap-4">
-        <span className="text-2xl">☀️</span>
+    <main className="min-h-screen bg-white text-gray-900" style={{ fontFamily: "'DM Sans', 'Segoe UI', sans-serif" }}>
+
+      {/* Header */}
+      <header className="border-b border-gray-200 px-8 py-5 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="3" fill="white"/>
+            <line x1="8" y1="1" x2="8" y2="3" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="8" y1="13" x2="8" y2="15" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="1" y1="8" x2="3" y2="8" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="13" y1="8" x2="15" y2="8" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="2.93" y1="2.93" x2="4.34" y2="4.34" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="11.66" y1="11.66" x2="13.07" y2="13.07" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="13.07" y1="2.93" x2="11.66" y2="4.34" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="4.34" y1="11.66" x2="2.93" y2="13.07" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </div>
         <div>
-          <h1 className="text-xl font-bold tracking-widest text-[#f0c040] uppercase">Solar POWER</h1>
-          <p className="text-xs text-[#4a7fa8] tracking-wider">Irradiancia Solar · NASA POWER API · México</p>
+          <h1 className="text-base font-semibold tracking-tight text-gray-900">Solar POWER</h1>
+          <p className="text-xs text-gray-400">Irradiancia Solar · NASA POWER · México</p>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
+      <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
+
+        {/* Grid mapa + controles */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
           {/* Mapa */}
-          <div className="space-y-3">
-            <label className="text-xs tracking-widest text-[#4a7fa8] uppercase">
-              01 · Selecciona ubicación en México
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-widest">
+              01 · Ubicación
             </label>
-            <div className="relative rounded-xl border border-[#1e3a5f] overflow-hidden h-[420px]">
+            <div className="relative rounded-xl border border-gray-200 overflow-hidden h-[380px]">
               <MapSelector onLocationSelect={handleMapClick} lat={lat} lon={lon} />
               {lat && lon && (
-                <div className="absolute bottom-3 right-3 z-[1000] bg-[#0a0f1e]/90 border border-[#f0c040]/30 rounded px-3 py-1.5 text-xs text-[#f0c040] tabular-nums pointer-events-none">
+                <div className="absolute bottom-3 right-3 z-[1000] bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 shadow-sm pointer-events-none">
                   {lat.toFixed(4)}°N · {lon.toFixed(4)}°W
                 </div>
               )}
@@ -98,81 +124,182 @@ export default function Home() {
           </div>
 
           {/* Controles */}
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <label className="text-xs tracking-widest text-[#4a7fa8] uppercase">02 · Período de tiempo</label>
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-widest">
+                02 · Período
+              </label>
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <span className="text-xs text-[#3a6a88]">Fecha inicio</span>
-                  <input type="date" value={start} onChange={(e) => setStart(e.target.value)} max={end || undefined}
-                    className="w-full bg-[#0d1b2a] border border-[#1e3a5f] rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#f0c040] transition-colors [color-scheme:dark]" />
+                  <span className="text-xs text-gray-400">Fecha inicio</span>
+                  <input
+                    type="date"
+                    value={start}
+                    onChange={(e) => setStart(e.target.value)}
+                    max={end || undefined}
+                    className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:border-amber-400 transition-colors"
+                  />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-xs text-[#3a6a88]">Fecha fin</span>
-                  <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} min={start || undefined}
-                    className="w-full bg-[#0d1b2a] border border-[#1e3a5f] rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#f0c040] transition-colors [color-scheme:dark]" />
+                  <span className="text-xs text-gray-400">Fecha fin</span>
+                  <input
+                    type="date"
+                    value={end}
+                    onChange={(e) => setEnd(e.target.value)}
+                    min={start || undefined}
+                    className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:border-amber-400 transition-colors"
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="rounded-xl border border-[#1e3a5f] bg-[#0d1b2a] p-5 space-y-2 text-sm">
-              <p className="text-xs text-[#4a7fa8] uppercase tracking-widest mb-3">Parámetros</p>
+            {/* Resumen */}
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-2">
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-2">Parámetros</p>
               <Row label="Latitud"  value={lat  ? `${lat}°`  : "—"} />
               <Row label="Longitud" value={lon  ? `${lon}°`  : "—"} />
               <Row label="Inicio"   value={start || "—"} />
               <Row label="Fin"      value={end   || "—"} />
-              <Row label="Variable" value="ALLSKY_SFC_SW_DWN" highlight />
+              <Row label="Variable" value="ALLSKY_SFC_SW_DWN" accent />
             </div>
 
-            <button onClick={handleSubmit} disabled={loading}
-              className="w-full py-4 rounded-xl font-bold tracking-widest uppercase text-sm transition-all duration-200 bg-[#f0c040] text-[#0a0f1e] hover:bg-[#ffd060] disabled:opacity-40 disabled:cursor-not-allowed">
-              {loading ? "Consultando NASA POWER..." : "Consultar Datos →"}
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="w-full py-3 rounded-xl font-medium text-sm transition-all duration-150
+                         bg-amber-400 text-white hover:bg-amber-500
+                         disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {loading ? "Consultando NASA POWER..." : "Consultar datos →"}
             </button>
 
             {error && (
-              <div className="rounded-lg border border-red-800 bg-red-950/40 px-4 py-3 text-red-400 text-sm">⚠ {error}</div>
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 text-sm">
+                {error}
+              </div>
             )}
           </div>
         </div>
 
         {/* Resultados */}
         {result && (
-          <div className="space-y-4 border-t border-[#1e3a5f] pt-8">
+          <div className="space-y-8 border-t border-gray-100 pt-10">
+
+            {/* Encabezado resultados */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-[#f0c040] tracking-wider">Vista Previa de Datos</h2>
-                <p className="text-xs text-[#4a7fa8] mt-1">
-                  Mostrando 24 de {result.total_rows.toLocaleString()} registros · {result.lat}°N, {result.lon}°W
+                <h2 className="text-base font-semibold text-gray-900">Resultados</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {result.total_rows.toLocaleString()} registros · {result.lat}°N, {result.lon}°W
                 </p>
               </div>
-              <span className="text-xs border border-[#1e6b3a] text-[#4ab870] px-3 py-1 rounded-full">
-                ✓ {result.total_rows.toLocaleString()} registros totales
+              <span className="text-xs border border-green-200 text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                {result.total_rows.toLocaleString()} registros totales
               </span>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-[#1e3a5f]">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[#0d1b2a] border-b border-[#1e3a5f]">
-                    {result.columns.map((col) => (
-                      <th key={col} className="px-4 py-3 text-left text-xs tracking-widest text-[#4a7fa8] uppercase whitespace-nowrap">{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.preview.map((row, i) => (
-                    <tr key={i} className="border-b border-[#0d1b2a] hover:bg-[#0d1b2a]/60 transition-colors">
-                      {result.columns.map((col) => (
-                        <td key={col} className={`px-4 py-2.5 tabular-nums whitespace-nowrap ${col === "ALLSKY_SFC_SW_DWN" ? "text-[#f0c040] font-bold" : "text-[#8ab0c8]"}`}>
-                          {row[col] != null ? String(row[col]) : "No disponible"}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Gráfica de irradiancia */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-gray-700">
+                Irradiancia solar horaria — ALLSKY_SFC_SW_DWN (kW·h/m²)
+              </h3>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis
+                      dataKey="hora"
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e5e7eb" }}
+                      interval={Math.floor(chartData.length / 8)}
+                      tickFormatter={(v) => v?.toString().slice(11, 16) || ""}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={40}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "white",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "8px",
+                        fontSize: "12px",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.06)"
+                      }}
+                      formatter={(value: any) => {
+                        const numericValue = value as string | number | null | undefined;
+                        return numericValue == null
+                          ? ["No disponible", "Irradiancia"]
+                          : [`${numericValue} kW·h/m²`, "Irradiancia"];
+                      }}
+                      labelFormatter={(label) => `Hora: ${label}`}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="irradiancia"
+                      stroke="#f59e0b"
+                      strokeWidth={1.5}
+                      dot={false}
+                      activeDot={{ r: 4, fill: "#f59e0b" }}
+                      connectNulls={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-            <p className="text-xs text-[#2a5a7a] text-center">Unidad: kW·h/m² · Valores -999 reemplazados por NaN</p>
+
+            {/* Tabla completa scrollable */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-gray-700">Datos completos</h3>
+              <div className="rounded-xl border border-gray-100 overflow-hidden">
+                <div className="overflow-auto max-h-[480px]">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-white z-10">
+                      <tr className="border-b border-gray-100">
+                        {result.columns.map((col) => (
+                          <th
+                            key={col}
+                            className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-widest whitespace-nowrap"
+                          >
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.preview.map((row, i) => (
+                        <tr
+                          key={i}
+                          className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                        >
+                          {result.columns.map((col) => (
+                            <td
+                              key={col}
+                              className={`px-4 py-2.5 tabular-nums whitespace-nowrap text-sm ${
+                                row[col] === -999
+                                  ? "text-gray-300 italic"
+                                  : col === "ALLSKY_SFC_SW_DWN"
+                                  ? "text-amber-500 font-medium"
+                                  : "text-gray-600"
+                              }`}
+                            >
+                              {row[col] === -999 ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">
+                Unidad: kW·h/m²
+              </p>
+            </div>
+
           </div>
         )}
       </div>
@@ -180,11 +307,21 @@ export default function Home() {
   );
 }
 
-function Row({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+function Row({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
   return (
     <div className="flex justify-between items-center">
-      <span className="text-[#3a6a88]">{label}</span>
-      <span className={highlight ? "text-[#f0c040] text-xs" : "text-white"}>{value}</span>
+      <span className="text-xs text-gray-400">{label}</span>
+      <span className={accent ? "text-xs text-amber-500 font-medium" : "text-xs text-gray-700"}>
+        {value}
+      </span>
     </div>
   );
 }
