@@ -47,6 +47,9 @@ export default function Home() {
 
   const [estados, setEstados] = useState<string[]>([]);
   const [municipios, setMunicipios] = useState<string[]>([]);
+  const [nodos, setNodos] = useState<{ CLAVE: string; NOMBRE: string }[]>([]);
+  const [nodo, setNodo] = useState("");
+
 
 
   const fetchEstados = async () => {
@@ -72,11 +75,18 @@ export default function Home() {
 
     const unicos = [...new Set(data.map((r) => r.MUNICIPIO as string))].sort();
     setMunicipios(unicos);
-
-
-
-
   };
+
+  const fetchNodos = async (estadoVal: string, municipioVal: string) => {
+    const { data, error } = await supabase
+      .from("NODO")
+      .select("CLAVE, NOMBRE")
+      .eq("ESTADO", estadoVal)
+      .eq("MUNICIPIO", municipioVal)
+
+    if (error) return;
+    setNodos(data as { CLAVE: string; NOMBRE: string }[]);
+  }
 
 
 
@@ -152,8 +162,11 @@ export default function Home() {
   const handleMunicipioChange = async (value: string) => {
     setMunicipio(value);
     // setGeoError(null);
+    setNodo("");
+    setNodos([]);
     if (value && estado) {
       await geocode(value + ", " + estado + ", México", 11);
+      await fetchNodos(estado, value);
     }
   };
 
@@ -197,6 +210,10 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+
+
+
 
   const chartData = result?.preview.map((row) => ({
     hora: row["datetime"] as string,
@@ -481,16 +498,50 @@ export default function Home() {
             </div>
           )}
         </div>
+
+
+        {/* COLUMNA DE PRECIOS AQUI LA BORRAS SI NO CHARCHA — Precios */}
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-amber-400">03</span>
+            <span className="text-sm font-medium text-gray-700">Selección de nodo</span>
+          </div>
+
+          {!municipio ? (
+            <p className="text-xs text-gray-400">
+              Selecciona un estado y municipio para ver los nodos disponibles.
+            </p>
+          ) : nodos.length === 0 ? (
+            <p className="text-xs text-gray-400">
+              No hay nodos registrados para este municipio.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-xs text-gray-400">Nodo</label>
+              <select
+                value={nodo}
+                onChange={(e) => setNodo(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400"
+              >
+                <option value="">Selecciona un nodo</option>
+                {nodos.map((n) => (
+                  <option key={n.CLAVE} value={n.CLAVE}>
+                    {n.CLAVE} — {n.NOMBRE}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
       </div>
 
-      {/* COLUMNA DE PRECIOS AQUI LA BORRAS SI NO CHARCHA — Precios */}
-      <div className="space-y-6">
-        {/* Paso 1: selector de nodo */}
-      </div>
+
 
 
 
     </main>
+
   );
 }
 
