@@ -101,6 +101,10 @@ export default function Home() {
       .order("FECHA", { ascending: true })
       .order("HORA", { ascending: true });
 
+  console.log("mercado:", mercado);
+  console.log("data:", data);
+  console.log("error:", error);
+
     if (error) {
       setErrorPrecios("Error al consultar precios.");
       setLoadingPrecios(false);
