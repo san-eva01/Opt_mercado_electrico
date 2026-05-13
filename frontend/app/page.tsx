@@ -153,6 +153,38 @@ export default function Home() {
     setLoadingPrecios2(false);
   };
 
+    const fetchPrecios3 = async () => {
+    if (!nodo3 || !startPrecios3 || !endPrecios3) return;
+
+    setLoadingPrecios3(true);
+    setErrorPrecios3(null);
+    setPrecios3([]);
+
+    const { data, error } = await supabase
+      .from(mercado3)
+      .select("FECHA, HORA, PRECIO_MARGINAL_LOCAL")
+      .eq("CLAVE_NODO", nodo3)
+      .gte("FECHA", startPrecios3)
+      .lte("FECHA", endPrecios3)
+      .order("FECHA", { ascending: true })
+      .order("HORA", { ascending: true });
+
+    if (error) {
+      setErrorPrecios3("Error al consultar precios.");
+      setLoadingPrecios3(false);
+      return;
+    }
+
+    setPrecios3(
+      (data ?? []).map((r) => ({
+        fecha: r.FECHA as string,
+        hora: r.HORA as number,
+        precio: r.PRECIO_MARGINAL_LOCAL as number,
+      }))
+    );
+    setLoadingPrecios3(false);
+  };
+
 
 
   // Coordenadas seleccionadas
@@ -199,6 +231,14 @@ export default function Home() {
   const [precios2, setPrecios2] = useState<{ fecha: string; hora: number; precio: number }[]>([]);
   const [loadingPrecios2, setLoadingPrecios2] = useState(false);
   const [errorPrecios2, setErrorPrecios2] = useState<string | null>(null);
+
+    const [nodo3, setNodo3] = useState("");
+  const [mercado3, setMercado3] = useState<"MDA" | "MTR">("MDA");
+  const [startPrecios3, setStartPrecios3] = useState("");
+  const [endPrecios3, setEndPrecios3] = useState("");
+  const [precios3, setPrecios3] = useState<{ fecha: string; hora: number; precio: number }[]>([]);
+  const [loadingPrecios3, setLoadingPrecios3] = useState(false);
+  const [errorPrecios3, setErrorPrecios3] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -333,6 +373,11 @@ export default function Home() {
   }));
 
   const preciosChartData2 = precios2.map((r) => ({
+    label: `${r.fecha} ${String(r.hora).padStart(2, "0")}:00`,
+    precio: r.precio,
+  }));
+
+  const preciosChartData3 = precios3.map((r) => ({
     label: `${r.fecha} ${String(r.hora).padStart(2, "0")}:00`,
     precio: r.precio,
   }));
@@ -924,27 +969,7 @@ export default function Home() {
 
               {/* ── Nodo 1 ── */}
               <ColNodo
-                numero="Nodo 1"
-                nodos={nodos}
-                municipio={municipio}
-                nodo={nodo}
-                setNodo={setNodo}
-                mercado={mercado}
-                setMercado={setMercado}
-                startPrecios={startPrecios}
-                setStartPrecios={setStartPrecios}
-                endPrecios={endPrecios}
-                setEndPrecios={setEndPrecios}
-                fetchPrecios={fetchPrecios}
-                loadingPrecios={loadingPrecios}
-                errorPrecios={errorPrecios}
-                precios={precios}
-                preciosChartData={preciosChartData}
-              />
-
-              {/* ── Nodo 2 ── */}
-              <ColNodo
-                numero="Nodo 2"
+                 numero="Nodo 2"
                 nodos={nodos}
                 municipio={municipio}
                 nodo={nodo2}
@@ -960,6 +985,26 @@ export default function Home() {
                 errorPrecios={errorPrecios2}
                 precios={precios2}
                 preciosChartData={preciosChartData2}
+              />
+
+              {/* ── Nodo 2 ── */}
+              <ColNodo
+                numero="Nodo 2"
+                nodos={nodos}
+                municipio={municipio}
+                nodo={nodo3}
+                setNodo={setNodo3}
+                mercado={mercado3}
+                setMercado={setMercado3}
+                startPrecios={startPrecios3}
+                setStartPrecios={setStartPrecios3}
+                endPrecios={endPrecios3}
+                setEndPrecios={setEndPrecios3}
+                fetchPrecios={fetchPrecios3}
+                loadingPrecios={loadingPrecios3}
+                errorPrecios={errorPrecios3}
+                precios={precios3}
+                preciosChartData={preciosChartData3}
               />
 
             </div>
