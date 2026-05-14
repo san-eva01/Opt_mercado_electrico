@@ -44,7 +44,7 @@ export default function Home() {
 
   type Vista = "normal" | "graficas" | "comparar-nodos" | "comparar-irradiancia";
   const [vista, setVista] = useState<Vista>("normal");
-const [modoUbicacion, setModoUbicacion] = useState<"compartida" | "distinta">("compartida");
+  const [modoUbicacion, setModoUbicacion] = useState<"compartida" | "distinta">("compartida");
 
 
 
@@ -61,24 +61,24 @@ const [modoUbicacion, setModoUbicacion] = useState<"compartida" | "distinta">("c
   };
 
   const fetchEstados2 = async () => {
-  const { data, error } = await supabase
-    .from("NODO")
-    .select("ESTADO")
-    .not("ESTADO", "is", null);
-  if (error) return;
-  const unicos = [...new Set(data.map((r) => r.ESTADO as string))].sort();
-  setEstados2(unicos);
-};
+    const { data, error } = await supabase
+      .from("NODO")
+      .select("ESTADO")
+      .not("ESTADO", "is", null);
+    if (error) return;
+    const unicos = [...new Set(data.map((r) => r.ESTADO as string))].sort();
+    setEstados2(unicos);
+  };
 
   const fetchEstados3 = async () => {
-  const { data, error } = await supabase
-    .from("NODO")
-    .select("ESTADO")
-    .not("ESTADO", "is", null);
-  if (error) return;
-  const unicos = [...new Set(data.map((r) => r.ESTADO as string))].sort();
-  setEstados3(unicos);
-};
+    const { data, error } = await supabase
+      .from("NODO")
+      .select("ESTADO")
+      .not("ESTADO", "is", null);
+    if (error) return;
+    const unicos = [...new Set(data.map((r) => r.ESTADO as string))].sort();
+    setEstados3(unicos);
+  };
 
   const fetchMunicipios = async (estadoSeleccionado: string) => {
     const { data, error } = await supabase
@@ -130,6 +130,28 @@ const [modoUbicacion, setModoUbicacion] = useState<"compartida" | "distinta">("c
 
     if (error) return;
     setNodos(data as { CLAVE: string; NOMBRE: string }[]);
+  }
+
+  const fetchNodos2 = async (estadoVal: string, municipioVal: string) => {
+    const { data, error } = await supabase
+      .from("NODO")
+      .select("CLAVE, NOMBRE")
+      .eq("ESTADO", estadoVal)
+      .eq("MUNICIPIO", municipioVal)
+
+    if (error) return;
+    setNodos2(data as { CLAVE: string; NOMBRE: string }[]);
+  }
+
+  const fetchNodos3 = async (estadoVal: string, municipioVal: string) => {
+    const { data, error } = await supabase
+      .from("NODO")
+      .select("CLAVE, NOMBRE")
+      .eq("ESTADO", estadoVal)
+      .eq("MUNICIPIO", municipioVal)
+
+    if (error) return;
+    setNodos3(data as { CLAVE: string; NOMBRE: string }[]);
   }
 
 
@@ -245,7 +267,7 @@ const [modoUbicacion, setModoUbicacion] = useState<"compartida" | "distinta">("c
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SolarResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-    // Estado y municipio
+  // Estado y municipio
   const [estado, setEstado] = useState("");
   const [municipio, setMunicipio] = useState("");
   // Dirección
@@ -257,7 +279,7 @@ const [modoUbicacion, setModoUbicacion] = useState<"compartida" | "distinta">("c
   const [geoError, setGeoError] = useState<string | null>(null);
 
 
-   //columna comparativa de irradiancia 1
+  //columna comparativa de irradiancia 1
   const [lat2, setLat2] = useState<number | null>(null);
   const [lon2, setLon2] = useState<number | null>(null);
   const [mapCenter2, setMapCenter2] = useState<MapCenter>({ lat: 23.5, lon: -102.5, zoom: 5 });
@@ -266,18 +288,18 @@ const [modoUbicacion, setModoUbicacion] = useState<"compartida" | "distinta">("c
   const [loading2, setLoading2] = useState(false);
   const [result2, setResult2] = useState<SolarResponse | null>(null);
   const [error2, setError2] = useState<string | null>(null);
-    const [estado2, setEstado2] = useState("");
+  const [estado2, setEstado2] = useState("");
   const [municipio2, setMunicipio2] = useState("");
-const [calle2, setCalle2] = useState("");
-const [numero2, setNumero2] = useState("");
-const [coloniaCP2, setColoniaCP2] = useState("");
-const [geocoding2, setGeocoding2] = useState(false);
-const [geoError2, setGeoError2] = useState<string | null>(null);
+  const [calle2, setCalle2] = useState("");
+  const [numero2, setNumero2] = useState("");
+  const [coloniaCP2, setColoniaCP2] = useState("");
+  const [geocoding2, setGeocoding2] = useState(false);
+  const [geoError2, setGeoError2] = useState<string | null>(null);
 
 
 
 
-     //columna comparativa de irradiancia 2
+  //columna comparativa de irradiancia 2
   const [lat3, setLat3] = useState<number | null>(null);
   const [lon3, setLon3] = useState<number | null>(null);
   const [mapCenter3, setMapCenter3] = useState<MapCenter>({ lat: 23.5, lon: -102.5, zoom: 5 });
@@ -286,19 +308,19 @@ const [geoError2, setGeoError2] = useState<string | null>(null);
   const [loading3, setLoading3] = useState(false);
   const [result3, setResult3] = useState<SolarResponse | null>(null);
   const [error3, setError3] = useState<string | null>(null);
-      const [estado3, setEstado3] = useState("");
+  const [estado3, setEstado3] = useState("");
   const [municipio3, setMunicipio3] = useState("");
-const [calle3, setCalle3] = useState("");
-const [numero3, setNumero3] = useState("");
-const [coloniaCP3, setColoniaCP3] = useState("");
-const [geocoding3, setGeocoding3] = useState(false);
-const [geoError3, setGeoError3] = useState<string | null>(null);
+  const [calle3, setCalle3] = useState("");
+  const [numero3, setNumero3] = useState("");
+  const [coloniaCP3, setColoniaCP3] = useState("");
+  const [geocoding3, setGeocoding3] = useState(false);
+  const [geoError3, setGeoError3] = useState<string | null>(null);
 
 
 
 
   const [estados2, setEstados2] = useState<string[]>([]);
-    const [estados3, setEstados3] = useState<string[]>([]);
+  const [estados3, setEstados3] = useState<string[]>([]);
 
   //para precios
   const [estados, setEstados] = useState<string[]>([]);
@@ -306,7 +328,10 @@ const [geoError3, setGeoError3] = useState<string | null>(null);
   const [municipios2, setMunicipios2] = useState<string[]>([]);
   const [municipios3, setMunicipios3] = useState<string[]>([]);
   const [nodos, setNodos] = useState<{ CLAVE: string; NOMBRE: string }[]>([]);
+  const [nodos2, setNodos2] = useState<{ CLAVE: string; NOMBRE: string }[]>([]);
+  const [nodos3, setNodos3] = useState<{ CLAVE: string; NOMBRE: string }[]>([]);
   const [nodo, setNodo] = useState("");
+  const [compartidoNodos, setCompartidoNodos] = useState(true); // true = compartido, false = independiente
 
   const [mercado, setMercado] = useState<"MDA" | "MTR">("MDA"); // botón seleccionado
   const [startPrecios, setStartPrecios] = useState("");          // fecha inicio precios
@@ -332,12 +357,12 @@ const [geoError3, setGeoError3] = useState<string | null>(null);
   const [errorPrecios3, setErrorPrecios3] = useState<string | null>(null);
 
 
- 
-      useEffect(() => {
-        fetchEstados();      // para columna 1
-        fetchEstados2();     // para columna 2
-        fetchEstados3();     // para columna 3
-      }, []);
+
+  useEffect(() => {
+    fetchEstados();      // para columna 1
+    fetchEstados2();     // para columna 2
+    fetchEstados3();     // para columna 3
+  }, []);
 
 
   //coordinar listas de precios con las de irradiancia
@@ -388,49 +413,49 @@ const [geoError3, setGeoError3] = useState<string | null>(null);
 
   //llamada a nominatim vista comparativa irradiancia 1
   const geocode2 = async (query: string, zoom: number) => {
-  setGeocoding2(true);
-  setGeoError2(null);
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=mx&format=json&limit=1`,
-      { headers: { "Accept-Language": "es" } }
-    );
-    const data = await res.json();
-    if (data.length === 0) { setGeoError2("No se encontró la ubicación."); return; }
-    const newLat = parseFloat(parseFloat(data[0].lat).toFixed(4));
-    const newLon = parseFloat(parseFloat(data[0].lon).toFixed(4));
-    setLat2(newLat);
-    setLon2(newLon);
-    setMapCenter2({ lat: newLat, lon: newLon, zoom });
-  } catch {
-    setGeoError2("Error al geocodificar.");
-  } finally {
-    setGeocoding2(false);
-  }
-};
+    setGeocoding2(true);
+    setGeoError2(null);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=mx&format=json&limit=1`,
+        { headers: { "Accept-Language": "es" } }
+      );
+      const data = await res.json();
+      if (data.length === 0) { setGeoError2("No se encontró la ubicación."); return; }
+      const newLat = parseFloat(parseFloat(data[0].lat).toFixed(4));
+      const newLon = parseFloat(parseFloat(data[0].lon).toFixed(4));
+      setLat2(newLat);
+      setLon2(newLon);
+      setMapCenter2({ lat: newLat, lon: newLon, zoom });
+    } catch {
+      setGeoError2("Error al geocodificar.");
+    } finally {
+      setGeocoding2(false);
+    }
+  };
 
-//llamada a nominatim vista comparativa irradiancia 2
+  //llamada a nominatim vista comparativa irradiancia 2
   const geocode3 = async (query: string, zoom: number) => {
-  setGeocoding3(true);
-  setGeoError3(null);
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=mx&format=json&limit=1`,
-      { headers: { "Accept-Language": "es" } }
-    );
-    const data = await res.json();
-    if (data.length === 0) { setGeoError3("No se encontró la ubicación."); return; }
-    const newLat = parseFloat(parseFloat(data[0].lat).toFixed(4));
-    const newLon = parseFloat(parseFloat(data[0].lon).toFixed(4));
-    setLat3(newLat);
-    setLon3(newLon);
-    setMapCenter3({ lat: newLat, lon: newLon, zoom });
-  } catch {
-    setGeoError3("Error al geocodificar.");
-  } finally {
-    setGeocoding3(false);
-  }
-};
+    setGeocoding3(true);
+    setGeoError3(null);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=mx&format=json&limit=1`,
+        { headers: { "Accept-Language": "es" } }
+      );
+      const data = await res.json();
+      if (data.length === 0) { setGeoError3("No se encontró la ubicación."); return; }
+      const newLat = parseFloat(parseFloat(data[0].lat).toFixed(4));
+      const newLon = parseFloat(parseFloat(data[0].lon).toFixed(4));
+      setLat3(newLat);
+      setLon3(newLon);
+      setMapCenter3({ lat: newLat, lon: newLon, zoom });
+    } catch {
+      setGeoError3("Error al geocodificar.");
+    } finally {
+      setGeocoding3(false);
+    }
+  };
 
   // ── Handlers de ubicación ─────────────────────────────────────────────────
   const handleEstadoChange = async (value: string) => {
@@ -461,6 +486,9 @@ const [geoError3, setGeoError3] = useState<string | null>(null);
     setEstado2(value);
     setMunicipio2("");
     setMunicipios2([]);
+    if (!compartidoNodos) {
+      setNodos2([]);
+    }
     if (value) {
       await fetchMunicipios2(value);
       await geocode2(value + ", México", 7);
@@ -471,6 +499,9 @@ const [geoError3, setGeoError3] = useState<string | null>(null);
     setMunicipio2(value);
     if (value && estado2) {
       await geocode2(value + ", " + estado2 + ", México", 11);
+      if (!compartidoNodos) {
+        await fetchNodos2(estado2, value);
+      }
     }
   };
 
@@ -478,6 +509,9 @@ const [geoError3, setGeoError3] = useState<string | null>(null);
     setEstado3(value);
     setMunicipio3("");
     setMunicipios3([]);
+    if (!compartidoNodos) {
+      setNodos3([]);
+    }
     if (value) {
       await fetchMunicipios3(value);
       await geocode3(value + ", México", 7);
@@ -488,6 +522,9 @@ const [geoError3, setGeoError3] = useState<string | null>(null);
     setMunicipio3(value);
     if (value && estado3) {
       await geocode3(value + ", " + estado3 + ", México", 11);
+      if (!compartidoNodos) {
+        await fetchNodos3(estado3, value);
+      }
     }
   };
 
@@ -498,19 +535,19 @@ const [geoError3, setGeoError3] = useState<string | null>(null);
     await geocode(parts.join(", "), 15);
   };
 
-    //funcion de busqueda por direccion vista comparativa irradiancia 1
-const handleAddressSearch2 = async () => {
-  if (!calle2) return;
-  const parts = [calle2, numero2, coloniaCP2, municipio2, estado2, "México"].filter(Boolean);
-  await geocode2(parts.join(", "), 15);
-};
+  //funcion de busqueda por direccion vista comparativa irradiancia 1
+  const handleAddressSearch2 = async () => {
+    if (!calle2) return;
+    const parts = [calle2, numero2, coloniaCP2, municipio2, estado2, "México"].filter(Boolean);
+    await geocode2(parts.join(", "), 15);
+  };
 
-    //funcion de busqueda por direccion vista comparativa irradiancia 2
- const handleAddressSearch3 = async () => {
-  if (!calle3) return;
-  const parts = [calle3, numero3, coloniaCP3, municipio3, estado3, "México"].filter(Boolean);
-  await geocode3(parts.join(", "), 15);
-};   
+  //funcion de busqueda por direccion vista comparativa irradiancia 2
+  const handleAddressSearch3 = async () => {
+    if (!calle3) return;
+    const parts = [calle3, numero3, coloniaCP3, municipio3, estado3, "México"].filter(Boolean);
+    await geocode3(parts.join(", "), 15);
+  };
 
 
 
@@ -524,7 +561,7 @@ const handleAddressSearch2 = async () => {
     setError(null);
   }, []);
 
-    //posición del mapa irradiancia comparativa 1
+  //posición del mapa irradiancia comparativa 1
   const handleMapClick2 = useCallback((newLat: number, newLon: number) => {
     setLat2(parseFloat(newLat.toFixed(4)));
     setLon2(parseFloat(newLon.toFixed(4)));
@@ -533,7 +570,7 @@ const handleAddressSearch2 = async () => {
   }, []);
 
   //posición del mapa irradiancia comparativa 2
-      //posición del mapa irradiancia comparativa 1
+  //posición del mapa irradiancia comparativa 1
   const handleMapClick3 = useCallback((newLat: number, newLon: number) => {
     setLat3(parseFloat(newLat.toFixed(4)));
     setLon3(parseFloat(newLon.toFixed(4)));
@@ -572,7 +609,7 @@ const handleAddressSearch2 = async () => {
     }
   };
 
-   //consulta vista comparativa irradiancia 1
+  //consulta vista comparativa irradiancia 1
   const handleSubmit2 = async () => {
     if (!lat2 || !lon2) return setError2("Selecciona un punto en el mapa o ingresa una ubicación.");
     if (!start2 || !end2) return setError2("Selecciona el rango de fechas.");
@@ -600,8 +637,8 @@ const handleAddressSearch2 = async () => {
     }
   };
 
-    //consulta vista comparativa irradiancia 2
-      const handleSubmit3 = async () => {
+  //consulta vista comparativa irradiancia 2
+  const handleSubmit3 = async () => {
     if (!lat3 || !lon3) return setError3("Selecciona un punto en el mapa o ingresa una ubicación.");
     if (!start3 || !end3) return setError3("Selecciona el rango de fechas.");
     if (start3 > end3) return setError3("La fecha inicio debe ser anterior a la fecha fin.");
@@ -628,23 +665,23 @@ const handleAddressSearch2 = async () => {
     }
   };
 
-//tabla de datos para gráfica de irradiancia vista normal
+  //tabla de datos para gráfica de irradiancia vista normal
   const chartData = result?.preview.map((row) => ({
     hora: row["datetime"] as string,
     irradiancia: row["ALLSKY_SFC_SW_DWN"] === -999 ? null : (row["ALLSKY_SFC_SW_DWN"] as number),
   })) ?? [];
 
-//tabla de datos para gráfica de irradiancia comparativa 1
-const chartData2 = result2?.preview.map((row) => ({
-  hora: row["datetime"] as string,
-  irradiancia: row["ALLSKY_SFC_SW_DWN"] === -999 ? null : (row["ALLSKY_SFC_SW_DWN"] as number),
-})) ?? [];
+  //tabla de datos para gráfica de irradiancia comparativa 1
+  const chartData2 = result2?.preview.map((row) => ({
+    hora: row["datetime"] as string,
+    irradiancia: row["ALLSKY_SFC_SW_DWN"] === -999 ? null : (row["ALLSKY_SFC_SW_DWN"] as number),
+  })) ?? [];
 
-//tabla de datos para gráfica de irradiancia comparativa 2
-const chartData3 = result3?.preview.map((row) => ({
-  hora: row["datetime"] as string,
-  irradiancia: row["ALLSKY_SFC_SW_DWN"] === -999 ? null : (row["ALLSKY_SFC_SW_DWN"] as number),
-})) ?? [];
+  //tabla de datos para gráfica de irradiancia comparativa 2
+  const chartData3 = result3?.preview.map((row) => ({
+    hora: row["datetime"] as string,
+    irradiancia: row["ALLSKY_SFC_SW_DWN"] === -999 ? null : (row["ALLSKY_SFC_SW_DWN"] as number),
+  })) ?? [];
 
 
   //const municipiosList = estado ? (MUNICIPIOS[estado] ?? []) : [];
@@ -1211,37 +1248,127 @@ const chartData3 = result3?.preview.map((row) => ({
         {vista === "comparar-nodos" && (
           <div className="space-y-6">
 
-            {/* Estado y municipio compartidos — arriba centrado */}
-            <div className="max-w-xl mx-auto space-y-3">
-              <p className="text-xs font-medium text-gray-500 text-center uppercase tracking-widest">
+            {/* Botones de toggle */}
+            <div className="max-w-xl mx-auto flex gap-3 mb-6">
+              <button
+                onClick={() => setCompartidoNodos(true)}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium text-sm transition ${
+                  compartidoNodos
+                    ? "bg-amber-400 text-gray-900"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
                 Ubicación compartida
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-400">Estado</label>
-                  <select
-                    value={estado}
-                    onChange={(e) => handleEstadoChange(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400"
-                  >
-                    <option value="">Selecciona un estado</option>
-                    {estados.map((e) => <option key={e} value={e}>{e}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-400">Municipio</label>
-                  <select
-                    value={municipio}
-                    onChange={(e) => handleMunicipioChange(e.target.value)}
-                    disabled={!estado}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 disabled:bg-gray-50 disabled:text-gray-300"
-                  >
-                    <option value="">Selecciona un municipio</option>
-                    {municipios.map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
+              </button>
+              <button
+                onClick={() => setCompartidoNodos(false)}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium text-sm transition ${
+                  !compartidoNodos
+                    ? "bg-amber-400 text-gray-900"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                Ubicación independiente
+              </button>
+            </div>
+
+            {/* Ubicación compartida — arriba centrado */}
+            {compartidoNodos && (
+              <div className="max-w-xl mx-auto space-y-3">
+                <p className="text-xs font-medium text-gray-500 text-center uppercase tracking-widest">
+                  Ubicación compartida
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-400">Estado</label>
+                    <select
+                      value={estado}
+                      onChange={(e) => handleEstadoChange(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400"
+                    >
+                      <option value="">Selecciona un estado</option>
+                      {estados.map((e) => <option key={e} value={e}>{e}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-400">Municipio</label>
+                    <select
+                      value={municipio}
+                      onChange={(e) => handleMunicipioChange(e.target.value)}
+                      disabled={!estado}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 disabled:bg-gray-50 disabled:text-gray-300"
+                    >
+                      <option value="">Selecciona un municipio</option>
+                      {municipios.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Ubicación independiente — dos columnas */}
+            {!compartidoNodos && (
+              <div className="grid grid-cols-2 gap-6">
+                {/* Columna 1 */}
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-widest">Columna 1</p>
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-400">Estado</label>
+                      <select
+                        value={estado2}
+                        onChange={(e) => handleEstado2Change(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400"
+                      >
+                        <option value="">Selecciona un estado</option>
+                        {estados2.map((e) => <option key={e} value={e}>{e}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-400">Municipio</label>
+                      <select
+                        value={municipio2}
+                        onChange={(e) => handleMunicipio2Change(e.target.value)}
+                        disabled={!estado2}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 disabled:bg-gray-50 disabled:text-gray-300"
+                      >
+                        <option value="">Selecciona un municipio</option>
+                        {municipios2.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                {/* Columna 2 */}
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-widest">Columna 2</p>
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-400">Estado</label>
+                      <select
+                        value={estado3}
+                        onChange={(e) => handleEstado3Change(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400"
+                      >
+                        <option value="">Selecciona un estado</option>
+                        {estados3.map((e) => <option key={e} value={e}>{e}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-400">Municipio</label>
+                      <select
+                        value={municipio3}
+                        onChange={(e) => handleMunicipio3Change(e.target.value)}
+                        disabled={!estado3}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 disabled:bg-gray-50 disabled:text-gray-300"
+                      >
+                        <option value="">Selecciona un municipio</option>
+                        {municipios3.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Divisor */}
             <div className="h-px bg-gray-100" />
@@ -1251,9 +1378,9 @@ const chartData3 = result3?.preview.map((row) => ({
 
               {/* ── Nodo 1 ── */}
               <ColNodo
-                numero="Nodo 2"
-                nodos={nodos}
-                municipio={municipio}
+                numero="Nodo 1"
+                nodos={compartidoNodos ? nodos : nodos2}
+                municipio={compartidoNodos ? municipio : municipio2}
                 nodo={nodo2}
                 setNodo={setNodo2}
                 mercado={mercado2}
@@ -1272,8 +1399,8 @@ const chartData3 = result3?.preview.map((row) => ({
               {/* ── Nodo 2 ── */}
               <ColNodo
                 numero="Nodo 2"
-                nodos={nodos}
-                municipio={municipio}
+                nodos={compartidoNodos ? nodos : nodos3}
+                municipio={compartidoNodos ? municipio : municipio3}
                 nodo={nodo3}
                 setNodo={setNodo3}
                 mercado={mercado3}
@@ -1295,44 +1422,44 @@ const chartData3 = result3?.preview.map((row) => ({
 
         {/* Comparar irradiancia — columna izquierda dos veces */}
         {vista === "comparar-irradiancia" && (
-  <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-2 gap-8">
 
-<ColIrradiancia
-  estados={estados2} municipios={municipios2}   // ← ambos con 2
-  estado={estado2} municipio={municipio2}
-  onEstadoChange={handleEstado2Change}
-  onMunicipioChange={handleMunicipio2Change}
-  calle={calle2} numero={numero2} coloniaCP={coloniaCP2}
-  onCalleChange={setCalle2} onNumeroChange={setNumero2} onColoniaCPChange={setColoniaCP2}
-  onAddressSearch={handleAddressSearch2}
-  geocoding={geocoding2} geoError={geoError2}
-  lat={lat2} lon={lon2} mapCenter={mapCenter2}
-  onMapClick={handleMapClick2}
-  start={start2} end={end2}
-  onStartChange={setStart2} onEndChange={setEnd2}
-  loading={loading2} error={error2} onSubmit={handleSubmit2}
-  result={result2} chartData={chartData2}
-/>
+            <ColIrradiancia
+              estados={estados2} municipios={municipios2}   // ← ambos con 2
+              estado={estado2} municipio={municipio2}
+              onEstadoChange={handleEstado2Change}
+              onMunicipioChange={handleMunicipio2Change}
+              calle={calle2} numero={numero2} coloniaCP={coloniaCP2}
+              onCalleChange={setCalle2} onNumeroChange={setNumero2} onColoniaCPChange={setColoniaCP2}
+              onAddressSearch={handleAddressSearch2}
+              geocoding={geocoding2} geoError={geoError2}
+              lat={lat2} lon={lon2} mapCenter={mapCenter2}
+              onMapClick={handleMapClick2}
+              start={start2} end={end2}
+              onStartChange={setStart2} onEndChange={setEnd2}
+              loading={loading2} error={error2} onSubmit={handleSubmit2}
+              result={result2} chartData={chartData2}
+            />
 
-<ColIrradiancia
-  estados={estados3} municipios={municipios3}   // ← ambos con 3
-  estado={estado3} municipio={municipio3}
-  onEstadoChange={handleEstado3Change}
-  onMunicipioChange={handleMunicipio3Change}
-  calle={calle3} numero={numero3} coloniaCP={coloniaCP3}
-  onCalleChange={setCalle3} onNumeroChange={setNumero3} onColoniaCPChange={setColoniaCP3}
-  onAddressSearch={handleAddressSearch3}
-  geocoding={geocoding3} geoError={geoError3}
-  lat={lat3} lon={lon3} mapCenter={mapCenter3}
-  onMapClick={handleMapClick3}
-  start={start3} end={end3}
-  onStartChange={setStart3} onEndChange={setEnd3}
-  loading={loading3} error={error3} onSubmit={handleSubmit3}
-  result={result3} chartData={chartData3}
-/>
+            <ColIrradiancia
+              estados={estados3} municipios={municipios3}   // ← ambos con 3
+              estado={estado3} municipio={municipio3}
+              onEstadoChange={handleEstado3Change}
+              onMunicipioChange={handleMunicipio3Change}
+              calle={calle3} numero={numero3} coloniaCP={coloniaCP3}
+              onCalleChange={setCalle3} onNumeroChange={setNumero3} onColoniaCPChange={setColoniaCP3}
+              onAddressSearch={handleAddressSearch3}
+              geocoding={geocoding3} geoError={geoError3}
+              lat={lat3} lon={lon3} mapCenter={mapCenter3}
+              onMapClick={handleMapClick3}
+              start={start3} end={end3}
+              onStartChange={setStart3} onEndChange={setEnd3}
+              loading={loading3} error={error3} onSubmit={handleSubmit3}
+              result={result3} chartData={chartData3}
+            />
 
-  </div>
-)}
+          </div>
+        )}
 
       </div>
 
@@ -1693,10 +1820,10 @@ function ColIrradiancia({
       {/* Resumen y botón */}
       <div className="space-y-3">
         <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
-          <InfoCell label="Latitud"  value={lat  ? `${lat}°`  : "—"} />
-          <InfoCell label="Longitud" value={lon  ? `${lon}°`  : "—"} />
-          <InfoCell label="Inicio"   value={start || "—"} />
-          <InfoCell label="Fin"      value={end   || "—"} />
+          <InfoCell label="Latitud" value={lat ? `${lat}°` : "—"} />
+          <InfoCell label="Longitud" value={lon ? `${lon}°` : "—"} />
+          <InfoCell label="Inicio" value={start || "—"} />
+          <InfoCell label="Fin" value={end || "—"} />
           <InfoCell label="Variable" value="ALLSKY_SFC_SW_DWN" accent />
         </div>
 
@@ -1760,10 +1887,9 @@ function ColIrradiancia({
                     {result.preview.map((row, i) => (
                       <tr key={i} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
                         {result.columns.map((col) => (
-                          <td key={col} className={`px-4 py-2.5 tabular-nums whitespace-nowrap ${
-                            row[col] === -999 ? "text-gray-300 italic" :
-                            col === "ALLSKY_SFC_SW_DWN" ? "text-amber-500 font-medium" : "text-gray-600"
-                          }`}>
+                          <td key={col} className={`px-4 py-2.5 tabular-nums whitespace-nowrap ${row[col] === -999 ? "text-gray-300 italic" :
+                              col === "ALLSKY_SFC_SW_DWN" ? "text-amber-500 font-medium" : "text-gray-600"
+                            }`}>
                             {row[col] === -999 ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
                           </td>
                         ))}
