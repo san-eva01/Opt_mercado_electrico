@@ -5,15 +5,20 @@ Endpoint principal: POST /api/solar-data
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse          
 from pydantic import BaseModel
 import pandas as pd
 import httpx
 import io
 from datetime import date
+# reportlab 
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.units import cm
 
-# ─────────────────────────────────────────────
 # Inicialización
-# ─────────────────────────────────────────────
 app = FastAPI(
     title="Solar Irradiance API",
     description="Consulta datos de irradiancia solar desde NASA POWER",
@@ -47,6 +52,25 @@ class SolarResponse(BaseModel):
     start: str
     end: str
 
+# modelos de datos para el reporte
+class DatoFactibilidad(BaseModel):
+    hora: str
+    generacion: float
+    ingreso: float
+    irradiancia: float
+    precio: float
+
+class ReporteRequest(BaseModel):
+    capacidad: float
+    eficiencia: float
+    tipoCambio: float
+    semana: dict
+    datosFactibilidad: list[DatoFactibilidad]
+    calculos: dict
+    nodo: str
+    mercado: str
+    lat: float
+    lon: float
 
 # ─────────────────────────────────────────────
 # Utilidades
@@ -103,7 +127,9 @@ def fetch_and_process(url: str) -> pd.DataFrame:
 
     # Eliminar columnas de tiempo individuales (ya están en el índice)
     df.drop(columns=["YEAR", "MO", "DY", "HR"], inplace=True, errors="ignore")
-
+    
+#pasa a kiloWatt ya que estan en W/m2, y es mas comun en kW/m2
+    df["ALLSKY_SFC_SW_DWN"] = df["ALLSKY_SFC_SW_DWN"] / 1000
     # Reemplazar valores centinela de NASA (-999) por NaN
     df.replace(-999.0, float("nan"), inplace=True)
 
@@ -166,4 +192,101 @@ async def get_solar_data(req: SolarRequest):
         lon=req.lon,
         start=req.start,
         end=req.end,
+    )
+    
+    
+@app.post("/api/reporte-pdf")
+async def generar_reporte_pdf(req: ReporteRequest):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # ── Título ──
+    elements.append(Paragraph("Reporte de Factibilidad Fotovoltaica", styles["Title"]))
+    elements.append(Spacer(1, 0.5*cm))
+
+    # ── Parámetros del sistema ──
+    elements.append(Paragraph("Parámetros del sistema", styles["Heading2"]))
+    elements.append(Spacer(1, 0.3*cm))
+
+    params = [
+        ["Nodo", req.nodo],
+        ["Mercado", req.mercado],
+        ["Ubicación", f"{req.lat}°N, {req.lon}°W"],
+        ["Semana analizada", f"{req.semana['inicio']} al {req.semana['fin']}"],
+        ["Capacidad instalada", f"{req.capacidad} kW"],
+        ["Eficiencia", f"{req.eficiencia} %"],
+        ["Tipo de cambio", f"${req.tipoCambio:.2f} MXN/USD"],
+    ]
+
+    t = Table(params, colWidths=[6*cm, 10*cm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#FEF3C7")),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
+        ("PADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(t)
+    elements.append(Spacer(1, 0.8*cm))
+
+    # ── Tabla de generación e ingreso ──
+    elements.append(Paragraph("Generación e ingreso pronosticado por hora", styles["Heading2"]))
+    elements.append(Spacer(1, 0.3*cm))
+
+    tabla_datos = [["Hora", "Irradiancia (kW·h/m²)", "Generación (kWh)", "Precio ($/MWh)", "Ingreso ($)"]]
+    for d in req.datosFactibilidad:
+        tabla_datos.append([
+            d.hora,
+            f"{d.irradiancia:.4f}",
+            f"{d.generacion:.4f}",
+            f"{d.precio:.2f}",
+            f"${d.ingreso:.4f}",
+        ])
+
+    t2 = Table(tabla_datos, colWidths=[2.5*cm, 4*cm, 3.5*cm, 3.5*cm, 3*cm])
+    t2.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F59E0B")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FAFB")]),
+        ("PADDING", (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(t2)
+    elements.append(Spacer(1, 0.8*cm))
+
+    # ── Inversión y retorno ──
+    elements.append(Paragraph("Análisis de inversión y retorno", styles["Heading2"]))
+    elements.append(Spacer(1, 0.3*cm))
+
+    inversion = [
+        ["Inversión estimada (USD)", f"${req.calculos['inversionUSD']}"],
+        ["Inversión estimada (MXN)", f"${req.calculos['inversionMXN']}"],
+        ["Ingreso anual estimado", f"${req.calculos['ingresoAnual']}"],
+        ["Años de retorno de inversión", f"{req.calculos['anosRetorno']} años"],
+    ]
+
+    t3 = Table(inversion, colWidths=[9*cm, 7*cm])
+    t3.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#FEF3C7")),
+        ("BACKGROUND", (1, 3), (1, 3), colors.HexColor("#FEF3C7")),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
+        ("PADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(t3)
+
+    # ── Generar PDF ──
+    doc.build(elements)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=reporte_{req.nodo}.pdf"}
     )
