@@ -507,7 +507,7 @@ export default function Home() {
   //Calcular datos de generación e ingreso por semana activa
   const datosFactibilidad = useMemo(() => {
     if (!semanas.length || !result || !precios.length || capacidad === "" || eficiencia === "") return [];
-
+console.log("Semanas calculadas:", semanas);
     const semana = semanas[semanaActiva];
 
     // Filtrar irradiancia de la semana activa
@@ -543,9 +543,11 @@ export default function Home() {
 
       // Generación (kWh) = Irradiancia × Capacidad × (Eficiencia / 100)
       const generacion = irradianciaPromedio * (capacidad as number) * ((eficiencia as number) / 100);
+      console.log("Hora %d: Irradiancia %.2f W/m², Generación %.4f kWh, Precio %.2f $/MWh", hora, irradianciaPromedio, generacion, precioPromedio);
 
       // Ingreso ($) = Generación (kWh) × Precio ($/MWh) * 1000
-      const ingreso = generacion * precioPromedio * 1000;
+      const ingreso = generacion * (precioPromedio * 1000);
+      console.log("Hora %d: Ingreso %.2f $", hora, ingreso);
 
       return {
         hora: `${String(hora).padStart(2, "0")}:00`,
