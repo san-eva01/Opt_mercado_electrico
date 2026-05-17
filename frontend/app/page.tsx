@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
@@ -7,6 +8,10 @@ import {
   Tooltip, ResponsiveContainer
 } from "recharts";
 import { supabase } from "../lib/supabase";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+//declare module "dom-to-image-more";
+//import * as domtoimage from "dom-to-image-more";
 
 // Leaflet sin SSR
 const MapSelector = dynamic(() => import("../components/MapSelector"), {
@@ -507,7 +512,7 @@ export default function Home() {
   //Calcular datos de generación e ingreso por semana activa
   const datosFactibilidad = useMemo(() => {
     if (!semanas.length || !result || !precios.length || capacidad === "" || eficiencia === "") return [];
-console.log("Semanas calculadas:", semanas);
+    console.log("Semanas calculadas:", semanas);
     const semana = semanas[semanaActiva];
 
     // Filtrar irradiancia de la semana activa
@@ -543,10 +548,10 @@ console.log("Semanas calculadas:", semanas);
 
       // Generación (kWh) = Irradiancia × Capacidad × (Eficiencia / 100)
       const generacion = irradianciaPromedio * (capacidad as number) * ((eficiencia as number) / 100);
-      console.log("Hora %d: Irradiancia %.2f W/m², Generación %.4f kWh, Precio %.2f $/MWh", hora, irradianciaPromedio, generacion, precioPromedio);
+      console.log("Hora %d: Irradiancia %.2f W/m², Generación %.4f kWh, Precio %.2f $/MWh", hora, irradianciaPromedio, generacion, precioPromedio, ((eficiencia as number) / 100));
 
       // Ingreso ($) = Generación (kWh) × Precio ($/MWh) * 1000
-      const ingreso = generacion * (precioPromedio * 1000);
+      const ingreso = generacion * (precioPromedio * (1 / 1000));
       console.log("Hora %d: Ingreso %.2f $", hora, ingreso);
 
       return {
@@ -561,37 +566,40 @@ console.log("Semanas calculadas:", semanas);
     return porHora;
   }, [semanas, semanaActiva, result, precios, capacidad, eficiencia]);
 
+const totalSemana = useMemo(() => {
+  if (!datosFactibilidad.length) return null;
+  return {
+    generacion: datosFactibilidad.reduce((acc, r) => acc + r.generacion, 0).toFixed(4),
+    ingreso: datosFactibilidad.reduce((acc, r) => acc + r.ingreso, 0).toFixed(4),
+  };
+}, [datosFactibilidad]);
+
 
   //calcular inversion y retorno
   const calculos = useMemo(() => {
-    if (capacidad === "" || !tipoCambio || !start || !end) return null;
+    if (capacidad === "" || eficiencia === "" || !tipoCambio || !datosFactibilidad.length) return null;
 
-    // Inversión total
-    const inversionUSD = (capacidad as number) * 0.8;
-    const inversionMXN = inversionUSD * tipoCambio;
+    // 1. Costo de instalación
+    // Capacidad (kW) × (Eficiencia / 100) × Tipo de cambio
+    const costoInstalacion = (capacidad as number) * ((eficiencia as number) / 100) * tipoCambio;
 
-    // Ingreso total del período seleccionado
-    const ingresoTotal = datosFactibilidad.reduce((acc, row) => acc + row.ingreso, 0) * semanas.length;
+    // 2. Ingreso total del mes — sumatoria de todos los registros del período
+    const ingresoMes = datosFactibilidad.reduce((acc, r) => acc + r.ingreso, 0);
 
-    // Días del período
-    const fechaInicio = new Date(start);
-    const fechaFin = new Date(end);
-    const diasPeriodo = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    // 3. Ingreso anual — mes × 12
+    const ingresoAnual = ingresoMes * 12;
 
-    // Extrapolar ingreso a un año
-    const ingresoAnual = (ingresoTotal / diasPeriodo) * 365;
-
-    // Años de retorno
-    const anosRetorno = ingresoAnual > 0 ? inversionMXN / ingresoAnual : null;
+    // 4. Años de retorno
+    const anosRetorno = ingresoAnual > 0 ? costoInstalacion / ingresoAnual : null;
 
     return {
-      inversionUSD: inversionUSD.toFixed(2),
-      inversionMXN: inversionMXN.toFixed(2),
+      costoInstalacion: costoInstalacion.toFixed(2),
+      ingresoMes: ingresoMes.toFixed(2),
       ingresoAnual: ingresoAnual.toFixed(2),
       anosRetorno: anosRetorno ? anosRetorno.toFixed(1) : "—",
       tipoCambio: tipoCambio.toFixed(2),
     };
-  }, [capacidad, tipoCambio, start, end, datosFactibilidad, semanas]);
+  }, [capacidad, eficiencia, tipoCambio, datosFactibilidad]);
 
   // ── Handlers de ubicación ─────────────────────────────────────────────────
   const handleEstadoChange = async (value: string) => {
@@ -837,41 +845,176 @@ console.log("Semanas calculadas:", semanas);
     precio: r.precio,
   }));
 
-  const generarPDF = useCallback(async () => {
-    if (!calculos || !datosFactibilidad.length) return;
+const generarPDF = async () => {
+  if (!calculos || !datosFactibilidad.length || !totalSemana) return;
 
+    const domtoimage = (await import("dom-to-image-more")) as any;
+
+  const { default: jsPDF } = await import("jspdf");
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageWidth = 210;
+  const margin = 15;
+  const contentWidth = pageWidth - margin * 2;
+  let y = 15;
+
+  const amarillo: [number, number, number] = [245, 158, 11];
+  const grisClaro: [number, number, number] = [249, 250, 251];
+  const grisTexto: [number, number, number] = [75, 85, 99];
+  const negro: [number, number, number] = [17, 24, 39];
+
+  // ── Encabezado ──
+  doc.setFillColor(...amarillo);
+  doc.rect(0, 0, 210, 28, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.text("Reporte de Factibilidad Fotovoltaica", margin, 12);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text("Solar POWER · NASA POWER · CENACE", margin, 19);
+  doc.text(`Generado el ${new Date().toLocaleDateString("es-MX")}`, pageWidth - margin, 19, { align: "right" });
+  y = 36;
+
+  // ── Parámetros del sistema ──
+  doc.setTextColor(...negro);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text("Parámetros del sistema", margin, y);
+  y += 6;
+
+  const params: [string, string][] = [
+    ["Nodo", nodo],
+    ["Ubicación", `${lat?.toFixed(4)}°N, ${lon?.toFixed(4)}°W`],
+    ["Período analizado", `${start} al ${end}`],
+    ["Semana activa", `${semanas[semanaActiva]?.inicio} al ${semanas[semanaActiva]?.fin}`],
+    ["Capacidad instalada", `${capacidad} kW`],
+    ["Eficiencia", `${eficiencia} %`],
+    ["Tipo de cambio", `$${calculos.tipoCambio} MXN/USD`],
+  ];
+
+  params.forEach(([label, value], i) => {
+    const bgColor: [number, number, number] = i % 2 === 0 ? grisClaro : [255, 255, 255];
+    doc.setFillColor(...bgColor);
+    doc.rect(margin, y, contentWidth, 7, "F");
+    doc.setTextColor(...grisTexto);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text(label, margin + 3, y + 5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...negro);
+    doc.text(value ?? "—", margin + 60, y + 5);
+    y += 7;
+  });
+
+  y += 8;
+
+  // ── Resultados financieros ──
+  doc.setTextColor(...negro);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text("Resultados financieros", margin, y);
+  y += 6;
+
+  const totalSemanaData = totalSemana;
+
+  const financieros: [string, string][] = [
+    ["Generación total semana", `${totalSemanaData.generacion} kWh`],
+    ["Ingreso total semana", `$${totalSemanaData.ingreso} MXN`],
+    ["Ingreso mensual estimado", `$${calculos.ingresoMes} MXN`],
+    ["Ingreso anual estimado", `$${calculos.ingresoAnual} MXN`],
+    ["Costo de instalación", `$${calculos.costoInstalacion} MXN`],
+    ["Años de retorno de inversión", `${calculos.anosRetorno} años`],
+  ];
+
+  financieros.forEach(([label, value], i) => {
+    const isLast = i === financieros.length - 1;
+    const bgColor: [number, number, number] = isLast
+      ? [254, 243, 199]
+      : i % 2 === 0 ? grisClaro : [255, 255, 255];
+    doc.setFillColor(...bgColor);
+    doc.rect(margin, y, contentWidth, 7, "F");
+    doc.setTextColor(...grisTexto);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text(label, margin + 3, y + 5);
+    doc.setFont("helvetica", isLast ? "bold" : "normal");
+    doc.setTextColor(
+      isLast ? 180 : negro[0],
+      isLast ? 83 : negro[1],
+      isLast ? 9 : negro[2]
+    );
+    doc.text(value, margin + 90, y + 5);
+    y += 7;
+  });
+
+  y += 10;
+
+  // ── Gráfica 1 — Generación ──
+  doc.setTextColor(...negro);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text("Generación pronosticada (kWh)", margin, y);
+  y += 4;
+
+  const graficaGen = document.getElementById("grafica-generacion");
+  if (graficaGen) {
     try {
-      const res = await fetch(`${API_URL}/api/reporte-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          capacidad,
-          eficiencia,
-          tipoCambio,
-          semana: semanas[semanaActiva],
-          datosFactibilidad,
-          calculos,
-          nodo,
-          mercado,
-          lat,
-          lon,
-        }),
+      const img1 = await domtoimage.default.toPng(graficaGen, {
+        scale: 2,
+        bgcolor: "#f9fafb",
       });
-
-      if (!res.ok) throw new Error("Error al generar PDF");
-
-      // Descargar el PDF
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `reporte_factibilidad_${nodo}_${semanas[semanaActiva]?.inicio}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      alert("Error al generar el reporte PDF.");
+      const imgHeight1 = (graficaGen.offsetHeight * 2 * contentWidth) / (graficaGen.offsetWidth * 2);
+      if (y + imgHeight1 > 280) { doc.addPage(); y = 15; }
+      doc.addImage(img1, "PNG", margin, y, contentWidth, imgHeight1);
+      y += imgHeight1 + 10;
+    } catch (err) {
+      console.error("Error capturando gráfica 1:", err);
     }
-  }, [capacidad, eficiencia, tipoCambio, semanaActiva, datosFactibilidad, calculos, nodo, mercado, lat, lon, semanas]);
+  }
+
+  // ── Gráfica 2 — Ingreso ──
+  doc.setTextColor(...negro);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text("Ingreso pronosticado ($MXN)", margin, y);
+  y += 4;
+
+  const graficaIng = document.getElementById("grafica-ingreso");
+  if (graficaIng) {
+    try {
+      const img2 = await domtoimage.default.toPng(graficaIng, {
+        scale: 2,
+        bgcolor: "#f9fafb",
+      });
+      const imgHeight2 = (graficaIng.offsetHeight * 2 * contentWidth) / (graficaIng.offsetWidth * 2);
+      if (y + imgHeight2 > 280) { doc.addPage(); y = 15; }
+      doc.addImage(img2, "PNG", margin, y, contentWidth, imgHeight2);
+      y += imgHeight2 + 10;
+    } catch (err) {
+      console.error("Error capturando gráfica 2:", err);
+    }
+  }
+
+  // ── Pie de página ──
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFillColor(...amarillo);
+    doc.rect(0, 287, 210, 10, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(8);
+    doc.text("Solar POWER · Reporte de Factibilidad Fotovoltaica", margin, 293);
+    doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, 293, { align: "right" });
+  }
+
+  doc.save(`reporte_factibilidad_${nodo}_${start}_${end}.pdf`);
+};
+
+
+
+
+
 
   return (
 
@@ -918,596 +1061,598 @@ console.log("Semanas calculadas:", semanas);
             <div className="grid grid-cols-2 gap-8 max-w-7xl mx-auto px-6 py-8">
 
 
-            {/* COLUMNA DE irradiancia */}
-            <div className="space-y-6">
+              {/* COLUMNA DE irradiancia */}
+              <div className="space-y-6">
 
-              {/* ── Sección de ubicación ── */}
-              <div className="space-y-4">
-                <SectionLabel number="01" label="Ubicación" />
+                {/* ── Sección de ubicación ── */}
+                <div className="space-y-4">
+                  <SectionLabel number="01" label="Ubicación" />
 
-                {/* Estado y Municipio */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-gray-400">Estado</label>
-                    <select
-                      value={estado}
-                      onChange={(e) => handleEstadoChange(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-amber-400 transition-colors"
-                    >
-                      <option value="">Selecciona un estado</option>
-                      {estados.map((e) => <option key={e} value={e}>{e}</option>)}
-                    </select>
+                  {/* Estado y Municipio */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-400">Estado</label>
+                      <select
+                        value={estado}
+                        onChange={(e) => handleEstadoChange(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-amber-400 transition-colors"
+                      >
+                        <option value="">Selecciona un estado</option>
+                        {estados.map((e) => <option key={e} value={e}>{e}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-400">Municipio</label>
+                      <select
+                        value={municipio}
+                        onChange={(e) => handleMunicipioChange(e.target.value)}
+                        disabled={!estado}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-amber-400 transition-colors disabled:bg-gray-50 disabled:text-gray-300"
+                      >
+                        <option value="">Selecciona un municipio</option>
+                        {municipios.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-gray-400">Municipio</label>
-                    <select
-                      value={municipio}
-                      onChange={(e) => handleMunicipioChange(e.target.value)}
-                      disabled={!estado}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-amber-400 transition-colors disabled:bg-gray-50 disabled:text-gray-300"
+
+                  {/* ── Sección de período ── */}
+                  <div className="space-y-3">
+                    <SectionLabel number="01.1" label="Período de tiempo" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs text-gray-400">Fecha inicio</label>
+                        <input
+                          type="date"
+                          value={start}
+                          onChange={(e) => setStart(e.target.value)}
+                          max={end || undefined}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-gray-400">Fecha fin</label>
+                        <input
+                          type="date"
+                          value={end}
+                          onChange={(e) => setEnd(e.target.value)}
+                          min={start || undefined}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dirección */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-xs text-gray-400">Calle</label>
+                      <input
+                        type="text"
+                        value={calle}
+                        onChange={(e) => setCalle(e.target.value)}
+                        placeholder="Nombre de la calle"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-400">Número</label>
+                      <input
+                        type="text"
+                        value={numero}
+                        onChange={(e) => setNumero(e.target.value)}
+                        placeholder="Ej. 123"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-xs text-gray-400">Colonia o Código Postal</label>
+                      <input
+                        type="text"
+                        value={coloniaCP}
+                        onChange={(e) => setColoniaCP(e.target.value)}
+                        placeholder="Colonia o C.P."
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
+                      />
+                    </div>
+                    <button
+                      onClick={handleAddressSearch}
+                      disabled={geocoding || !calle}
+                      className="py-2.5 px-4 rounded-lg text-sm font-medium border border-amber-400 text-amber-500 hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <option value="">Selecciona un municipio</option>
-                      {municipios.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
+                      {geocoding ? "Buscando..." : "Buscar dirección"}
+                    </button>
+                  </div>
+
+                  {geoError && (
+                    <p className="text-xs text-red-500">{geoError}</p>
+                  )}
+
+                  {/* Separador */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-gray-100" />
+                    <span className="text-xs text-gray-400">o selecciona en el mapa</span>
+                    <div className="flex-1 h-px bg-gray-100" />
+                  </div>
+
+                  {/* Mapa */}
+                  <div className="relative rounded-xl border border-gray-200 overflow-hidden h-[380px]">
+                    <MapSelector
+                      onLocationSelect={handleMapClick}
+                      lat={lat}
+                      lon={lon}
+                      center={mapCenter}
+                    />
+                    {lat && lon && (
+                      <div className="absolute bottom-3 right-3 z-[1000] bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 shadow-sm pointer-events-none">
+                        {lat.toFixed(4)}°N · {lon.toFixed(4)}°W
+                      </div>
+                    )}
+                    {geocoding && (
+                      <div className="absolute inset-0 z-[999] bg-white/60 flex items-center justify-center">
+                        <span className="text-xs text-gray-500 bg-white px-4 py-2 rounded-full border border-gray-200 shadow-sm">
+                          Buscando ubicación...
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Dirección */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-xs text-gray-400">Calle</label>
-                    <input
-                      type="text"
-                      value={calle}
-                      onChange={(e) => setCalle(e.target.value)}
-                      placeholder="Nombre de la calle"
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-gray-400">Número</label>
-                    <input
-                      type="text"
-                      value={numero}
-                      onChange={(e) => setNumero(e.target.value)}
-                      placeholder="Ej. 123"
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-xs text-gray-400">Colonia o Código Postal</label>
-                    <input
-                      type="text"
-                      value={coloniaCP}
-                      onChange={(e) => setColoniaCP(e.target.value)}
-                      placeholder="Colonia o C.P."
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
-                    />
+
+                {/* Resumen y botón */}
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+                    <InfoCell label="Latitud" value={lat ? `${lat}°` : "—"} />
+                    <InfoCell label="Longitud" value={lon ? `${lon}°` : "—"} />
+                    <InfoCell label="Inicio" value={start || "—"} />
+                    <InfoCell label="Fin" value={end || "—"} />
+                    <InfoCell label="Variable" value="ALLSKY_SFC_SW_DWN" accent />
                   </div>
+
                   <button
-                    onClick={handleAddressSearch}
-                    disabled={geocoding || !calle}
-                    className="py-2.5 px-4 rounded-lg text-sm font-medium border border-amber-400 text-amber-500 hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {geocoding ? "Buscando..." : "Buscar dirección"}
-                  </button>
-                </div>
-
-                {geoError && (
-                  <p className="text-xs text-red-500">{geoError}</p>
-                )}
-
-                {/* Separador */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-gray-100" />
-                  <span className="text-xs text-gray-400">o selecciona en el mapa</span>
-                  <div className="flex-1 h-px bg-gray-100" />
-                </div>
-
-                {/* Mapa */}
-                <div className="relative rounded-xl border border-gray-200 overflow-hidden h-[380px]">
-                  <MapSelector
-                    onLocationSelect={handleMapClick}
-                    lat={lat}
-                    lon={lon}
-                    center={mapCenter}
-                  />
-                  {lat && lon && (
-                    <div className="absolute bottom-3 right-3 z-[1000] bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 shadow-sm pointer-events-none">
-                      {lat.toFixed(4)}°N · {lon.toFixed(4)}°W
-                    </div>
-                  )}
-                  {geocoding && (
-                    <div className="absolute inset-0 z-[999] bg-white/60 flex items-center justify-center">
-                      <span className="text-xs text-gray-500 bg-white px-4 py-2 rounded-full border border-gray-200 shadow-sm">
-                        Buscando ubicación...
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* ── Sección de período ── */}
-              <div className="space-y-3">
-                <SectionLabel number="02" label="Período de tiempo" />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-gray-400">Fecha inicio</label>
-                    <input
-                      type="date"
-                      value={start}
-                      onChange={(e) => setStart(e.target.value)}
-                      max={end || undefined}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-gray-400">Fecha fin</label>
-                    <input
-                      type="date"
-                      value={end}
-                      onChange={(e) => setEnd(e.target.value)}
-                      min={start || undefined}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Resumen y botón */}
-              <div className="space-y-3">
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
-                  <InfoCell label="Latitud" value={lat ? `${lat}°` : "—"} />
-                  <InfoCell label="Longitud" value={lon ? `${lon}°` : "—"} />
-                  <InfoCell label="Inicio" value={start || "—"} />
-                  <InfoCell label="Fin" value={end || "—"} />
-                  <InfoCell label="Variable" value="ALLSKY_SFC_SW_DWN" accent />
-                </div>
-
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="w-full py-3 rounded-xl font-medium text-sm transition-all duration-150
+                    onClick={handleSubmit}
+                    disabled={loading}
+                    className="w-full py-3 rounded-xl font-medium text-sm transition-all duration-150
                        bg-amber-400 text-white hover:bg-amber-500
                        disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {loading ? "Consultando NASA POWER..." : "Consultar datos →"}
-                </button>
+                  >
+                    {loading ? "Consultando NASA POWER..." : "Consultar datos →"}
+                  </button>
 
-                {error && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 text-sm">
-                    {error}
+                  {error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 text-sm">
+                      {error}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Resultados ── */}
+                {result && (
+                  <div className="space-y-8 border-t border-gray-100 pt-8">
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-sm font-semibold text-gray-900">Resultados</h2>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {result.total_rows.toLocaleString()} registros · {result.lat}°N, {result.lon}°W
+                        </p>
+                      </div>
+                      <span className="text-xs border border-green-200 text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                        {result.total_rows.toLocaleString()} registros
+                      </span>
+                    </div>
+
+                    {/* Gráfica */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-gray-500">Irradiancia solar horaria — ALLSKY_SFC_SW_DWN (kW·h/m²)</p>
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                        <ResponsiveContainer width="100%" height={240}>
+                          <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                            <XAxis
+                              dataKey="hora"
+                              tick={{ fontSize: 10, fill: "#9ca3af" }}
+                              tickLine={false}
+                              axisLine={{ stroke: "#e5e7eb" }}
+                              interval={Math.floor(chartData.length / 8)}
+                              tickFormatter={(v) => v?.toString().slice(5, 10) || ""}
+                            />
+                            <YAxis
+                              tick={{ fontSize: 10, fill: "#9ca3af" }}
+                              tickLine={false}
+                              axisLine={false}
+                              width={40}
+                            />
+                            <Tooltip
+                              contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
+                              formatter={(v) => v == null ? ["No disponible", "Irradiancia"] : [`${v} kW·h/m²`, "Irradiancia"]}
+                              labelFormatter={(l) => `${l}`}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="irradiancia"
+                              stroke="#f59e0b"
+                              strokeWidth={1.5}
+                              dot={false}
+                              activeDot={{ r: 4, fill: "#f59e0b" }}
+                              connectNulls={false}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Tabla completa scrollable */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-gray-500">Datos completos</p>
+                      <div className="rounded-xl border border-gray-100 overflow-hidden">
+                        <div className="overflow-auto max-h-[500px]">
+                          <table className="w-full text-sm">
+                            <thead className="sticky top-0 bg-white z-10 shadow-[0_1px_0_#f3f4f6]">
+                              <tr>
+                                {result.columns.map((col) => (
+                                  <th key={col} className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                                    {col}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {result.preview.map((row, i) => (
+                                <tr key={i} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+                                  {result.columns.map((col) => (
+                                    <td key={col} className={`px-4 py-2.5 tabular-nums whitespace-nowrap ${row[col] === -999 ? "text-gray-300 italic" :
+                                      col === "ALLSKY_SFC_SW_DWN" ? "text-amber-500 font-medium" :
+                                        "text-gray-600"
+                                      }`}>
+                                      {row[col] === -999 ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-400">Unidad: kW·h/m²</p>
+                    </div>
+
                   </div>
                 )}
               </div>
 
-              {/* ── Resultados ── */}
-              {result && (
-                <div className="space-y-8 border-t border-gray-100 pt-8">
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-sm font-semibold text-gray-900">Resultados</h2>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {result.total_rows.toLocaleString()} registros · {result.lat}°N, {result.lon}°W
+              {/* COLUMNA DE PRECIOS AQUI LA BORRAS SI NO CHARCHA — Precios */}
+              <div className="space-y-6">
+                {/*titulo*/}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-amber-400">03</span>
+                  <span className="text-sm font-medium text-gray-700">Selección de nodo</span>
+                </div>
+
+                {!municipio ? (
+                  <p className="text-xs text-gray-400">
+                    Selecciona un estado y municipio para ver los nodos disponibles.
+                  </p>
+                ) : nodos.length === 0 ? (
+                  <p className="text-xs text-gray-400">
+                    No hay nodos registrados para este municipio.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-400">Nodo</label>
+                    <select
+                      value={nodo}
+                      onChange={(e) => setNodo(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400"
+                    >
+                      <option value="">Selecciona un nodo</option>
+                      {nodos.map((n) => (
+                        <option key={n.CLAVE} value={n.CLAVE}>
+                          {n.CLAVE} — {n.NOMBRE}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+
+                {/*aqui agrega el resultado de la busqueda del nodo, con opcion de cambiar la fecha, con boton de busqueda, y grafica a la misma
+          altura que las de irradiancia*/}
+                {/* Botones MDA / MTR */}
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400">Mercado</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setMercado("MDA")}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${mercado === "MDA"
+                        ? "bg-amber-400 text-white border-amber-400"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-amber-300"
+                        }`}
+                    >
+                      MDA
+                    </button>
+                    <button
+                      onClick={() => setMercado("MTR")}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${mercado === "MTR"
+                        ? "bg-amber-400 text-white border-amber-400"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-amber-300"
+                        }`}
+                    >
+                      MTR
+                    </button>
+                  </div>
+                </div>
+
+                {/* Fechas de precios */}
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-400">Período de precios</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <span className="text-xs text-gray-400">Inicio</span>
+                      <input
+                        type="date"
+                        value={startPrecios}
+                        onChange={(e) => setStartPrecios(e.target.value)}
+                        max={endPrecios || undefined}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-xs text-gray-400">Fin</span>
+                      <input
+                        type="date"
+                        value={endPrecios}
+                        onChange={(e) => setEndPrecios(e.target.value)}
+                        min={startPrecios || undefined}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botón consultar precios */}
+                <button
+                  onClick={fetchPrecios}
+                  disabled={loadingPrecios || !nodo || !startPrecios || !endPrecios}
+                  className="w-full py-3 rounded-xl font-medium text-sm bg-amber-400 text-white hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loadingPrecios ? "Consultando precios..." : `Consultar ${mercado} →`}
+                </button>
+
+                {errorPrecios && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 text-sm">
+                    {errorPrecios}
+                  </div>
+                )}
+
+                {/* Gráfica de precios */}
+                {precios.length > 0 && (
+                  <div className="space-y-6">
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-gray-500">
+                        Precio Marginal Local — {mercado} ($/MWh)
+                      </p>
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                        <ResponsiveContainer width="100%" height={240}>
+                          <LineChart data={preciosChartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                            <XAxis
+                              dataKey="label"
+                              tick={{ fontSize: 10, fill: "#9ca3af" }}
+                              tickLine={false}
+                              axisLine={{ stroke: "#e5e7eb" }}
+                              interval={Math.floor(preciosChartData.length / 8)}
+                              tickFormatter={(v) => v?.toString().slice(5, 10) || ""}
+                            />
+                            <YAxis
+                              tick={{ fontSize: 10, fill: "#9ca3af" }}
+                              tickLine={false}
+                              axisLine={false}
+                              width={50}
+                            />
+                            <Tooltip
+                              contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
+                              formatter={(v) => v != null ? [`$${Number(v).toFixed(2)}/MWh`, "Precio"] : ["—", "Precio"]}
+                              labelFormatter={(l) => `${l}`}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="precio"
+                              stroke="#3b82f6"
+                              strokeWidth={1.5}
+                              dot={false}
+                              activeDot={{ r: 4, fill: "#3b82f6" }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Tabla de precios */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-gray-500">Datos completos</p>
+                      <div className="rounded-xl border border-gray-100 overflow-hidden">
+                        <div className="overflow-auto max-h-[500px]">
+                          <table className="w-full text-sm">
+                            <thead className="sticky top-0 bg-white z-10 shadow-[0_1px_0_#f3f4f6]">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-widest">Fecha</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-widest">Hora</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-widest">Precio ($/MWh)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {precios.map((row, i) => (
+                                <tr key={i} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+                                  <td className="px-4 py-2.5 text-gray-600 tabular-nums">{row.fecha}</td>
+                                  <td className="px-4 py-2.5 text-gray-600 tabular-nums">{String(row.hora).padStart(2, "0")}:00</td>
+                                  <td className="px-4 py-2.5 text-blue-500 font-medium tabular-nums">${row.precio.toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        {precios.length.toLocaleString()} registros · {mercado} · Nodo {nodo}
                       </p>
                     </div>
-                    <span className="text-xs border border-green-200 text-green-600 bg-green-50 px-3 py-1 rounded-full">
-                      {result.total_rows.toLocaleString()} registros
-                    </span>
+
                   </div>
+                )}
 
-                  {/* Gráfica */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-500">Irradiancia solar horaria — ALLSKY_SFC_SW_DWN (kW·h/m²)</p>
-                    <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                      <ResponsiveContainer width="100%" height={240}>
-                        <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis
-                            dataKey="hora"
-                            tick={{ fontSize: 10, fill: "#9ca3af" }}
-                            tickLine={false}
-                            axisLine={{ stroke: "#e5e7eb" }}
-                            interval={Math.floor(chartData.length / 8)}
-                            tickFormatter={(v) => v?.toString().slice(5, 10) || ""}
-                          />
-                          <YAxis
-                            tick={{ fontSize: 10, fill: "#9ca3af" }}
-                            tickLine={false}
-                            axisLine={false}
-                            width={40}
-                          />
-                          <Tooltip
-                            contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
-                            formatter={(v) => v == null ? ["No disponible", "Irradiancia"] : [`${v} kW·h/m²`, "Irradiancia"]}
-                            labelFormatter={(l) => `${l}`}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="irradiancia"
-                            stroke="#f59e0b"
-                            strokeWidth={1.5}
-                            dot={false}
-                            activeDot={{ r: 4, fill: "#f59e0b" }}
-                            connectNulls={false}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  {/* Tabla completa scrollable */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-500">Datos completos</p>
-                    <div className="rounded-xl border border-gray-100 overflow-hidden">
-                      <div className="overflow-auto max-h-[500px]">
-                        <table className="w-full text-sm">
-                          <thead className="sticky top-0 bg-white z-10 shadow-[0_1px_0_#f3f4f6]">
-                            <tr>
-                              {result.columns.map((col) => (
-                                <th key={col} className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                                  {col}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {result.preview.map((row, i) => (
-                              <tr key={i} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
-                                {result.columns.map((col) => (
-                                  <td key={col} className={`px-4 py-2.5 tabular-nums whitespace-nowrap ${row[col] === -999 ? "text-gray-300 italic" :
-                                    col === "ALLSKY_SFC_SW_DWN" ? "text-amber-500 font-medium" :
-                                      "text-gray-600"
-                                    }`}>
-                                    {row[col] === -999 ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400">Unidad: kW·h/m²</p>
-                  </div>
-
-                </div>
-              )}
-            </div>
-
-
-            {/* COLUMNA DE PRECIOS AQUI LA BORRAS SI NO CHARCHA — Precios */}
-            <div className="space-y-6">
-              {/*titulo*/}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-amber-400">03</span>
-                <span className="text-sm font-medium text-gray-700">Selección de nodo</span>
               </div>
-
-              {!municipio ? (
-                <p className="text-xs text-gray-400">
-                  Selecciona un estado y municipio para ver los nodos disponibles.
-                </p>
-              ) : nodos.length === 0 ? (
-                <p className="text-xs text-gray-400">
-                  No hay nodos registrados para este municipio.
-                </p>
-              ) : (
-                <div className="space-y-1">
-                  <label className="text-xs text-gray-400">Nodo</label>
-                  <select
-                    value={nodo}
-                    onChange={(e) => setNodo(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400"
-                  >
-                    <option value="">Selecciona un nodo</option>
-                    {nodos.map((n) => (
-                      <option key={n.CLAVE} value={n.CLAVE}>
-                        {n.CLAVE} — {n.NOMBRE}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-
-              {/*aqui agrega el resultado de la busqueda del nodo, con opcion de cambiar la fecha, con boton de busqueda, y grafica a la misma
-          altura que las de irradiancia*/}
-              {/* Botones MDA / MTR */}
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400">Mercado</label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setMercado("MDA")}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${mercado === "MDA"
-                      ? "bg-amber-400 text-white border-amber-400"
-                      : "bg-white text-gray-600 border-gray-200 hover:border-amber-300"
-                      }`}
-                  >
-                    MDA
-                  </button>
-                  <button
-                    onClick={() => setMercado("MTR")}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${mercado === "MTR"
-                      ? "bg-amber-400 text-white border-amber-400"
-                      : "bg-white text-gray-600 border-gray-200 hover:border-amber-300"
-                      }`}
-                  >
-                    MTR
-                  </button>
-                </div>
-              </div>
-
-              {/* Fechas de precios */}
-              <div className="space-y-2">
-                <label className="text-xs text-gray-400">Período de precios</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <span className="text-xs text-gray-400">Inicio</span>
-                    <input
-                      type="date"
-                      value={startPrecios}
-                      onChange={(e) => setStartPrecios(e.target.value)}
-                      max={endPrecios || undefined}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs text-gray-400">Fin</span>
-                    <input
-                      type="date"
-                      value={endPrecios}
-                      onChange={(e) => setEndPrecios(e.target.value)}
-                      min={startPrecios || undefined}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Botón consultar precios */}
-              <button
-                onClick={fetchPrecios}
-                disabled={loadingPrecios || !nodo || !startPrecios || !endPrecios}
-                className="w-full py-3 rounded-xl font-medium text-sm bg-amber-400 text-white hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {loadingPrecios ? "Consultando precios..." : `Consultar ${mercado} →`}
-              </button>
-
-              {errorPrecios && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 text-sm">
-                  {errorPrecios}
-                </div>
-              )}
-
-              {/* Gráfica de precios */}
-              {precios.length > 0 && (
-                <div className="space-y-6">
-
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-500">
-                      Precio Marginal Local — {mercado} ($/MWh)
-                    </p>
-                    <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                      <ResponsiveContainer width="100%" height={240}>
-                        <LineChart data={preciosChartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis
-                            dataKey="label"
-                            tick={{ fontSize: 10, fill: "#9ca3af" }}
-                            tickLine={false}
-                            axisLine={{ stroke: "#e5e7eb" }}
-                            interval={Math.floor(preciosChartData.length / 8)}
-                            tickFormatter={(v) => v?.toString().slice(5, 10) || ""}
-                          />
-                          <YAxis
-                            tick={{ fontSize: 10, fill: "#9ca3af" }}
-                            tickLine={false}
-                            axisLine={false}
-                            width={50}
-                          />
-                          <Tooltip
-                            contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
-                            formatter={(v) => v != null ? [`$${Number(v).toFixed(2)}/MWh`, "Precio"] : ["—", "Precio"]}
-                            labelFormatter={(l) => `${l}`}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="precio"
-                            stroke="#3b82f6"
-                            strokeWidth={1.5}
-                            dot={false}
-                            activeDot={{ r: 4, fill: "#3b82f6" }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  {/* Tabla de precios */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-500">Datos completos</p>
-                    <div className="rounded-xl border border-gray-100 overflow-hidden">
-                      <div className="overflow-auto max-h-[500px]">
-                        <table className="w-full text-sm">
-                          <thead className="sticky top-0 bg-white z-10 shadow-[0_1px_0_#f3f4f6]">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-widest">Fecha</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-widest">Hora</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-widest">Precio ($/MWh)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {precios.map((row, i) => (
-                              <tr key={i} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
-                                <td className="px-4 py-2.5 text-gray-600 tabular-nums">{row.fecha}</td>
-                                <td className="px-4 py-2.5 text-gray-600 tabular-nums">{String(row.hora).padStart(2, "0")}:00</td>
-                                <td className="px-4 py-2.5 text-blue-500 font-medium tabular-nums">${row.precio.toFixed(2)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      {precios.length.toLocaleString()} registros · {mercado} · Nodo {nodo}
-                    </p>
-                  </div>
-
-                </div>
-              )}
-
-            </div>
 
             </div>
 
             {/* ── 04 Características del sistema ── */}
             <div className="border-t border-gray-100 pt-8 space-y-6">
-            <SectionLabel number="04" label="Características del sistema fotovoltaico" />
+              <SectionLabel number="04" label="Características del sistema fotovoltaico" />
 
-            <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs text-gray-400">Capacidad instalada (kW)</label>
-              <input
-                type="number"
-                min={0}
-                value={capacidad}
-                onChange={(e) => setCapacidad(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                placeholder="Ej. 100"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-gray-400">Eficiencia (%)</label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={eficiencia}
-                onChange={(e) => setEficiencia(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                placeholder="Ej. 20"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-gray-400">Tipo de cambio (MXN/USD)</label>
-              <div className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-600 flex items-center justify-between">
-                <span>{loadingTipoCambio ? "Consultando..." : tipoCambio ? `$${tipoCambio.toFixed(2)}` : "No disponible"}</span>
-                <button onClick={fetchTipoCambio} className="text-xs text-amber-500 hover:underline">
-                  Actualizar
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Gráficas de factibilidad — solo si hay datos */}
-          {datosFactibilidad.length > 0 && (
-            <div className="space-y-8">
-
-              {/* Navegador de semanas */}
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setSemanaActiva((s) => Math.max(0, s - 1))}
-                  disabled={semanaActiva === 0}
-                  className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:border-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  ← Semana anterior
-                </button>
-                <span className="text-xs text-gray-500">
-                  Semana {semanaActiva + 1} de {semanas.length} ·{" "}
-                  {semanas[semanaActiva]?.inicio} al {semanas[semanaActiva]?.fin}
-                </span>
-                <button
-                  onClick={() => setSemanaActiva((s) => Math.min(semanas.length - 1, s + 1))}
-                  disabled={semanaActiva === semanas.length - 1}
-                  className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:border-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Semana siguiente →
-                </button>
-              </div>
-
-              {/* Gráfica 1 — Generación pronosticada */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-gray-500">
-                  Generación pronosticada (kWh) — promedio horario semanal
-                </p>
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <LineChart data={datosFactibilidad} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="hora" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
-                      <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} width={50} />
-                      <Tooltip
-                        contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
-                        formatter={(v) => [`${Number(v).toFixed(4)} kWh`, "Generación"]}
-                      />
-                      <Line type="monotone" dataKey="generacion" stroke="#f59e0b" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: "#f59e0b" }} />
-                    </LineChart>
-                  </ResponsiveContainer>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400">Capacidad instalada (kW)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={capacidad}
+                    onChange={(e) => setCapacidad(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                    placeholder="Ej. 100"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400">Eficiencia (%)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={eficiencia}
+                    onChange={(e) => setEficiencia(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                    placeholder="Ej. 20"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400">Tipo de cambio (MXN/USD)</label>
+                  <div className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-600 flex items-center justify-between">
+                    <span>{loadingTipoCambio ? "Consultando..." : tipoCambio ? `$${tipoCambio.toFixed(2)}` : "No disponible"}</span>
+                    <button onClick={fetchTipoCambio} className="text-xs text-amber-500 hover:underline">
+                      Actualizar
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Gráfica 2 — Ingreso pronosticado */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-gray-500">
-                  Ingreso pronosticado ($MXN) — promedio horario semanal
-                </p>
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <LineChart data={datosFactibilidad} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="hora" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
-                      <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} width={60} />
-                      <Tooltip
-                        contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
-                        formatter={(v) => [`$${Number(v).toFixed(4)}`, "Ingreso"]}
-                      />
-                      <Line type="monotone" dataKey="ingreso" stroke="#3b82f6" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: "#3b82f6" }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+              {/* Gráficas de factibilidad — solo si hay datos */}
+              {datosFactibilidad.length > 0 && (
+                <div className="space-y-8">
 
-              {/* Inversión y retorno */}
-              {calculos && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
-                    <p className="text-xs text-gray-400">Inversión estimada (USD)</p>
-                    <p className="text-lg font-semibold text-gray-900">${calculos.inversionUSD}</p>
-                    <p className="text-xs text-gray-400">T.C. ${calculos.tipoCambio} MXN/USD</p>
+                  {/* Navegador de semanas */}
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setSemanaActiva((s) => Math.max(0, s - 1))}
+                      disabled={semanaActiva === 0}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:border-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      ← Semana anterior
+                    </button>
+                    <span className="text-xs text-gray-500">
+                      Semana {semanaActiva + 1} de {semanas.length} ·{" "}
+                      {semanas[semanaActiva]?.inicio} al {semanas[semanaActiva]?.fin}
+                    </span>
+                    <button
+                      onClick={() => setSemanaActiva((s) => Math.min(semanas.length - 1, s + 1))}
+                      disabled={semanaActiva === semanas.length - 1}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:border-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Semana siguiente →
+                    </button>
                   </div>
-                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
-                    <p className="text-xs text-gray-400">Inversión estimada (MXN)</p>
-                    <p className="text-lg font-semibold text-gray-900">${calculos.inversionMXN}</p>
+
+                  {/* Gráfica 1 — Generación pronosticada */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-500">
+                      Generación pronosticada (kWh) — promedio horario semanal
+                    </p>
+                    <div id="grafica-generacion" className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                      <ResponsiveContainer width="100%" height={260}>
+                        <LineChart data={datosFactibilidad} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="hora" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                          <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} width={50} />
+                          <Tooltip
+                            contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
+                            formatter={(v) => [`${Number(v).toFixed(4)} kWh`, "Generación"]}
+                          />
+                          <Line type="monotone" dataKey="generacion" stroke="#f59e0b" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: "#f59e0b" }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
-                    <p className="text-xs text-gray-400">Ingreso anual estimado</p>
-                    <p className="text-lg font-semibold text-gray-900">${calculos.ingresoAnual}</p>
-                    <p className="text-xs text-gray-400">Extrapolado del período</p>
+
+                  {/* Gráfica 2 — Ingreso pronosticado */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-500">
+                      Ingreso pronosticado ($MXN) — promedio horario semanal
+                    </p>
+                    <div  id="grafica-ingreso"  className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                      <ResponsiveContainer width="100%" height={260}>
+                        <LineChart data={datosFactibilidad} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="hora" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                          <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} width={60} />
+                          <Tooltip
+                            contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
+                            formatter={(v) => [`$${Number(v).toFixed(4)}`, "Ingreso"]}
+                          />
+                          <Line type="monotone" dataKey="ingreso" stroke="#3b82f6" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: "#3b82f6" }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                  <div className="rounded-xl border border-gray-100 bg-amber-50 border-amber-200 p-4 space-y-1">
-                    <p className="text-xs text-amber-600">Años de retorno de inversión</p>
-                    <p className="text-lg font-semibold text-amber-600">{calculos.anosRetorno} años</p>
-                  </div>
+
+                  {/* Inversión y retorno */}
+                  {calculos && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
+                        <p className="text-xs text-gray-400">¿Cuánto cuesta la instalación?</p>
+                        <p className="text-lg font-semibold text-gray-900">${calculos.costoInstalacion}</p>
+                        <p className="text-xs text-gray-400">kW · $ (T.C. ${calculos.tipoCambio} MXN/USD)</p>
+                      </div>
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
+                        <p className="text-xs text-gray-400">Ingreso total del mes</p>
+                        <p className="text-lg font-semibold text-gray-900">${calculos.ingresoMes}</p>
+                      </div>
+                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
+                        <p className="text-xs text-gray-400">Ingreso anual estimado</p>
+                        <p className="text-lg font-semibold text-gray-900">${calculos.ingresoAnual}</p>
+                        <p className="text-xs text-gray-400">Mes × 12</p>
+                      </div>
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-1">
+                        <p className="text-xs text-amber-600">¿En cuánto tiempo se recupera la inversión?</p>
+                        <p className="text-lg font-semibold text-amber-600">{calculos.anosRetorno} años</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Botón PDF */}
+                  {calculos && (
+                    <button
+                      onClick={generarPDF}
+                      className="w-full py-3 rounded-xl font-medium text-sm border border-gray-200 text-gray-600 hover:border-amber-400 hover:text-amber-500 transition-colors"
+                    >
+                      Generar reporte PDF →
+                    </button>
+                  )}
+
                 </div>
               )}
-
-              {/* Botón PDF */}
-              {calculos && (
-                <button
-                  onClick={generarPDF}
-                  className="w-full py-3 rounded-xl font-medium text-sm border border-gray-200 text-gray-600 hover:border-amber-400 hover:text-amber-500 transition-colors"
-                >
-                  Generar reporte PDF →
-                </button>
-              )}
-
-            </div>
-          )}
             </div>
           </div>
         )}
