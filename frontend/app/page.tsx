@@ -554,7 +554,9 @@ export default function Home() {
         : 0;
 
       // Generación (kWh) = Irradiancia × Capacidad × (Eficiencia / 100)
-      const generacion = irradianciaPromedio * (capacidad as number) * ((eficiencia as number) / 100);
+      const generacion = (irradianciaPromedio === -999 || irradianciaPromedio === -0.999)
+  ? 0
+  : irradianciaPromedio * (capacidad as number) * ((eficiencia as number) / 100);
       console.log("Hora %d: Irradiancia %.2f W/m², Generación %.4f kWh, Precio %.2f $/MWh", hora, irradianciaPromedio, generacion, precioPromedio, ((eficiencia as number) / 100));
 
       // Ingreso ($) = Generación (kWh) × Precio ($/MWh) * 1000
