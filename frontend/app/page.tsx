@@ -411,6 +411,10 @@ export default function Home() {
     fetchTipoCambio();
   }, []);
 
+  useEffect(() => {
+  setSemanaActiva(0);
+}, [start, end]);
+
   const toNasaDate = (d: string) => d.replace(/-/g, "");
 
   // llamada a nominatim vista normal de irradiancia
@@ -513,7 +517,10 @@ export default function Home() {
   const datosFactibilidad = useMemo(() => {
     if (!semanas.length || !result || !precios.length || capacidad === "" || eficiencia === "") return [];
     console.log("Semanas calculadas:", semanas);
-    const semana = semanas[semanaActiva];
+    //const semana = semanas[semanaActiva];
+
+  const semana = semanas[semanaActiva];
+  if (!semana) return [];
 
     // Filtrar irradiancia de la semana activa
     const irradianciaFiltrada = result.preview.filter((row) => {
@@ -578,6 +585,9 @@ const totalSemana = useMemo(() => {
   //calcular inversion y retorno
   const calculos = useMemo(() => {
     if (capacidad === "" || eficiencia === "" || !tipoCambio || !datosFactibilidad.length) return null;
+
+
+
 
     // 1. Costo de instalación
     // Capacidad (kW) × (Eficiencia / 100) × Tipo de cambio
@@ -1320,7 +1330,7 @@ const generarPDF = async () => {
                                       col === "ALLSKY_SFC_SW_DWN" ? "text-amber-500 font-medium" :
                                         "text-gray-600"
                                       }`}>
-                                      {row[col] === -999 ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
+                                      {row[col] === -999 || row[col] === -0.999 ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
                                     </td>
                                   ))}
                                 </tr>
@@ -2362,7 +2372,7 @@ function ColIrradiancia({
                           <td key={col} className={`px-4 py-2.5 tabular-nums whitespace-nowrap ${row[col] === -999 ? "text-gray-300 italic" :
                             col === "ALLSKY_SFC_SW_DWN" ? "text-amber-500 font-medium" : "text-gray-600"
                             }`}>
-                            {row[col] === -999 ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
+                            {row[col] === -999 || row[col] === -0.999  ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
                           </td>
                         ))}
                       </tr>
