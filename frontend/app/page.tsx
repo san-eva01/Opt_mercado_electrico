@@ -587,7 +587,19 @@ const totalSemana = useMemo(() => {
     const ingresoMes = datosFactibilidad.reduce((acc, r) => acc + r.ingreso, 0);
 
     // 3. Ingreso anual — mes × 12
-    const ingresoAnual = ingresoMes * 12;
+   // const ingresoAnual = ingresoMes * 12;
+   // Calcular cuántos meses tiene el período seleccionado
+const fechaInicio = new Date(start);
+const fechaFin = new Date(end);
+const mesesPeriodo = 
+  (fechaFin.getFullYear() - fechaInicio.getFullYear()) * 12 +
+  (fechaFin.getMonth() - fechaInicio.getMonth()) + 1;
+
+// Cuántas veces cabe ese período en un año
+const multiplicador = 12 / mesesPeriodo;
+
+// Ingreso anual — período × multiplicador
+const ingresoAnual = ingresoMes * multiplicador;
 
     // 4. Años de retorno
     const anosRetorno = ingresoAnual > 0 ? costoInstalacion / ingresoAnual : null;
