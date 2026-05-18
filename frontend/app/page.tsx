@@ -1375,7 +1375,7 @@ const generarPDF = async () => {
                     >
                       MDA
                     </button>
-                    <button
+                    {/*<button
                       onClick={() => setMercado("MTR")}
                       className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${mercado === "MTR"
                         ? "bg-amber-400 text-white border-amber-400"
@@ -1383,7 +1383,7 @@ const generarPDF = async () => {
                         }`}
                     >
                       MTR
-                    </button>
+                    </button>*/}
                   </div>
                 </div>
 
