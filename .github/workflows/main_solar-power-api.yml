@@ -8,9 +8,6 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
 
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +18,14 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          cd backend
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
       - name: Zip artifact
-        run: zip -r ../release.zip .
+        run: |
+          cd backend
+          zip -r ../release.zip .
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
