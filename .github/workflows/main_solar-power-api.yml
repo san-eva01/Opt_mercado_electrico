@@ -25,7 +25,8 @@ jobs:
       - name: Zip artifact
         run: |
           cd backend
-          zip -r ../release.zip .
+          zip -r release.zip .
+          mv release.zip ../release.zip
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
