@@ -412,8 +412,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-  setSemanaActiva(0);
-}, [start, end]);
+    setSemanaActiva(0);
+  }, [start, end]);
 
   const toNasaDate = (d: string) => d.replace(/-/g, "");
 
@@ -519,8 +519,8 @@ export default function Home() {
     console.log("Semanas calculadas:", semanas);
     //const semana = semanas[semanaActiva];
 
-  const semana = semanas[semanaActiva];
-  if (!semana) return [];
+    const semana = semanas[semanaActiva];
+    if (!semana) return [];
 
     // Filtrar irradiancia de la semana activa
     const irradianciaFiltrada = result.preview.filter((row) => {
@@ -555,8 +555,8 @@ export default function Home() {
 
       // Generación (kWh) = Irradiancia × Capacidad × (Eficiencia / 100)
       const generacion = (irradianciaPromedio === -999 || irradianciaPromedio === -0.999)
-  ? 0
-  : irradianciaPromedio * (capacidad as number) * ((eficiencia as number) / 100);
+        ? 0
+        : irradianciaPromedio * (capacidad as number) * ((eficiencia as number) / 100);
       console.log("Hora %d: Irradiancia %.2f W/m², Generación %.4f kWh, Precio %.2f $/MWh", hora, irradianciaPromedio, generacion, precioPromedio, ((eficiencia as number) / 100));
 
       // Ingreso ($) = Generación (kWh) × Precio ($/MWh) * 1000
@@ -575,55 +575,81 @@ export default function Home() {
     return porHora;
   }, [semanas, semanaActiva, result, precios, capacidad, eficiencia]);
 
-const totalSemana = useMemo(() => {
-  if (!datosFactibilidad.length) return null;
-  return {
-    generacion: datosFactibilidad.reduce((acc, r) => acc + r.generacion, 0).toFixed(4),
-    ingreso: datosFactibilidad.reduce((acc, r) => acc + r.ingreso, 0).toFixed(4),
-  };
-}, [datosFactibilidad]);
+  const totalSemana = useMemo(() => {
+    if (!datosFactibilidad.length) return null;
+    return {
+      generacion: datosFactibilidad.reduce((acc, r) => acc + r.generacion, 0).toFixed(4),
+      ingreso: datosFactibilidad.reduce((acc, r) => acc + r.ingreso, 0).toFixed(4),
+    };
+  }, [datosFactibilidad]);
+
+const ingresoTotalPeriodo = useMemo(() => {
+  if (!semanas.length || !result || !precios.length || capacidad === "" || eficiencia === "") return 0;
+
+  // Recorre TODAS las semanas, no solo la activa
+  return semanas.reduce((totalAcc, semana) => {
+
+    const irradianciaFiltrada = result.preview.filter((row) => {
+      const fecha = (row["datetime"] as string).slice(0, 10);
+      return fecha >= semana.inicio && fecha <= semana.fin;
+    });
+
+    const preciosFiltrados = precios.filter((p) =>
+      p.fecha >= semana.inicio && p.fecha <= semana.fin
+    );
+
+    const ingresoSemana = Array.from({ length: 24 }, (_, hora) => {
+      const irradianciaHora = irradianciaFiltrada
+        .filter((r) => parseInt((r["datetime"] as string).slice(11, 13)) === hora)
+        .map((r) => r["ALLSKY_SFC_SW_DWN"] as number)
+        .filter((v) => v !== -999 && v !== -0.999);
+
+      const preciosHora = preciosFiltrados
+        .filter((p) => p.hora === hora)
+        .map((p) => p.precio);
+
+      const irradianciaPromedio = irradianciaHora.length
+        ? irradianciaHora.reduce((a, b) => a + b, 0) / irradianciaHora.length
+        : 0;
+
+      const precioPromedio = preciosHora.length
+        ? preciosHora.reduce((a, b) => a + b, 0) / preciosHora.length
+        : 0;
+
+      const generacion = irradianciaPromedio * (capacidad as number) * ((eficiencia as number) / 100);
+      return generacion * precioPromedio / 1000;
+    }).reduce((a, b) => a + b, 0);
+
+    return totalAcc + ingresoSemana;
+  }, 0);
+}, [semanas, result, precios, capacidad, eficiencia]); // ← sin semanaActiva
 
 
   //calcular inversion y retorno
-  const calculos = useMemo(() => {
-    if (capacidad === "" || eficiencia === "" || !tipoCambio || !datosFactibilidad.length) return null;
+const calculos = useMemo(() => {
+  if (capacidad === "" || eficiencia === "" || !tipoCambio || !ingresoTotalPeriodo) return null;
 
+  const costoInstalacion = (capacidad as number) * ((eficiencia as number) / 100) * tipoCambio;
 
+  // Ingreso del período completo — ya no depende de semanaActiva
+  const ingresoMes = ingresoTotalPeriodo;
 
+  const mesesPeriodo =
+    (new Date(end).getFullYear() - new Date(start).getFullYear()) * 12 +
+    (new Date(end).getMonth() - new Date(start).getMonth()) + 1;
 
-    // 1. Costo de instalación
-    // Capacidad (kW) × (Eficiencia / 100) × Tipo de cambio
-    const costoInstalacion = (capacidad as number) * ((eficiencia as number) / 100) * tipoCambio;
+  const multiplicador = 12 / mesesPeriodo;
+  const ingresoAnual = ingresoMes * multiplicador;
+  const anosRetorno = ingresoAnual > 0 ? costoInstalacion / ingresoAnual : null;
 
-    // 2. Ingreso total del mes — sumatoria de todos los registros del período
-    const ingresoMes = datosFactibilidad.reduce((acc, r) => acc + r.ingreso, 0);
-
-    // 3. Ingreso anual — mes × 12
-   // const ingresoAnual = ingresoMes * 12;
-   // Calcular cuántos meses tiene el período seleccionado
-const fechaInicio = new Date(start);
-const fechaFin = new Date(end);
-const mesesPeriodo = 
-  (fechaFin.getFullYear() - fechaInicio.getFullYear()) * 12 +
-  (fechaFin.getMonth() - fechaInicio.getMonth()) + 1;
-
-// Cuántas veces cabe ese período en un año
-const multiplicador = 12 / mesesPeriodo;
-
-// Ingreso anual — período × multiplicador
-const ingresoAnual = ingresoMes * multiplicador;
-
-    // 4. Años de retorno
-    const anosRetorno = ingresoAnual > 0 ? costoInstalacion / ingresoAnual : null;
-
-    return {
-      costoInstalacion: costoInstalacion.toFixed(2),
-      ingresoMes: ingresoMes.toFixed(2),
-      ingresoAnual: ingresoAnual.toFixed(2),
-      anosRetorno: anosRetorno ? anosRetorno.toFixed(1) : "—",
-      tipoCambio: tipoCambio.toFixed(2),
-    };
-  }, [capacidad, eficiencia, tipoCambio, datosFactibilidad]);
+  return {
+    costoInstalacion: costoInstalacion.toFixed(2),
+    ingresoMes: ingresoMes.toFixed(2),
+    ingresoAnual: ingresoAnual.toFixed(2),
+    anosRetorno: anosRetorno ? anosRetorno.toFixed(1) : "—",
+    tipoCambio: tipoCambio.toFixed(2),
+  };
+}, [capacidad, eficiencia, tipoCambio, ingresoTotalPeriodo, start, end]);
 
   // ── Handlers de ubicación ─────────────────────────────────────────────────
   const handleEstadoChange = async (value: string) => {
@@ -869,171 +895,171 @@ const ingresoAnual = ingresoMes * multiplicador;
     precio: r.precio,
   }));
 
-const generarPDF = async () => {
-  if (!calculos || !datosFactibilidad.length || !totalSemana) return;
+  const generarPDF = async () => {
+    if (!calculos || !datosFactibilidad.length || !totalSemana) return;
 
     const domtoimage = (await import("dom-to-image-more")) as any;
 
-  const { default: jsPDF } = await import("jspdf");
+    const { default: jsPDF } = await import("jspdf");
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const pageWidth = 210;
-  const margin = 15;
-  const contentWidth = pageWidth - margin * 2;
-  let y = 15;
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageWidth = 210;
+    const margin = 15;
+    const contentWidth = pageWidth - margin * 2;
+    let y = 15;
 
-  const amarillo: [number, number, number] = [245, 158, 11];
-  const grisClaro: [number, number, number] = [249, 250, 251];
-  const grisTexto: [number, number, number] = [75, 85, 99];
-  const negro: [number, number, number] = [17, 24, 39];
+    const amarillo: [number, number, number] = [245, 158, 11];
+    const grisClaro: [number, number, number] = [249, 250, 251];
+    const grisTexto: [number, number, number] = [75, 85, 99];
+    const negro: [number, number, number] = [17, 24, 39];
 
-  // ── Encabezado ──
-  doc.setFillColor(...amarillo);
-  doc.rect(0, 0, 210, 28, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("Reporte de Factibilidad Fotovoltaica", margin, 12);
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.text("Solar POWER · NASA POWER · CENACE", margin, 19);
-  doc.text(`Generado el ${new Date().toLocaleDateString("es-MX")}`, pageWidth - margin, 19, { align: "right" });
-  y = 36;
-
-  // ── Parámetros del sistema ──
-  doc.setTextColor(...negro);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("Parámetros del sistema", margin, y);
-  y += 6;
-
-  const params: [string, string][] = [
-    ["Nodo", nodo],
-    ["Ubicación", `${lat?.toFixed(4)}°N, ${lon?.toFixed(4)}°W`],
-    ["Período analizado", `${start} al ${end}`],
-    ["Semana activa", `${semanas[semanaActiva]?.inicio} al ${semanas[semanaActiva]?.fin}`],
-    ["Capacidad instalada", `${capacidad} kW`],
-    ["Eficiencia", `${eficiencia} %`],
-    ["Tipo de cambio", `$${calculos.tipoCambio} MXN/USD`],
-  ];
-
-  params.forEach(([label, value], i) => {
-    const bgColor: [number, number, number] = i % 2 === 0 ? grisClaro : [255, 255, 255];
-    doc.setFillColor(...bgColor);
-    doc.rect(margin, y, contentWidth, 7, "F");
-    doc.setTextColor(...grisTexto);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.text(label, margin + 3, y + 5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...negro);
-    doc.text(value ?? "—", margin + 60, y + 5);
-    y += 7;
-  });
-
-  y += 8;
-
-  // ── Resultados financieros ──
-  doc.setTextColor(...negro);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("Resultados financieros", margin, y);
-  y += 6;
-
-  const totalSemanaData = totalSemana;
-
-  const financieros: [string, string][] = [
-    ["Generación total semana", `${totalSemanaData.generacion} kWh`],
-    ["Ingreso total semana", `$${totalSemanaData.ingreso} MXN`],
-    ["Ingreso mensual estimado", `$${calculos.ingresoMes} MXN`],
-    ["Ingreso anual estimado", `$${calculos.ingresoAnual} MXN`],
-    ["Costo de instalación", `$${calculos.costoInstalacion} MXN`],
-    ["Años de retorno de inversión", `${calculos.anosRetorno} años`],
-  ];
-
-  financieros.forEach(([label, value], i) => {
-    const isLast = i === financieros.length - 1;
-    const bgColor: [number, number, number] = isLast
-      ? [254, 243, 199]
-      : i % 2 === 0 ? grisClaro : [255, 255, 255];
-    doc.setFillColor(...bgColor);
-    doc.rect(margin, y, contentWidth, 7, "F");
-    doc.setTextColor(...grisTexto);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.text(label, margin + 3, y + 5);
-    doc.setFont("helvetica", isLast ? "bold" : "normal");
-    doc.setTextColor(
-      isLast ? 180 : negro[0],
-      isLast ? 83 : negro[1],
-      isLast ? 9 : negro[2]
-    );
-    doc.text(value, margin + 90, y + 5);
-    y += 7;
-  });
-
-  y += 10;
-
-  // ── Gráfica 1 — Generación ──
-  doc.setTextColor(...negro);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("Generación pronosticada (kWh)", margin, y);
-  y += 4;
-
-  const graficaGen = document.getElementById("grafica-generacion");
-  if (graficaGen) {
-    try {
-      const img1 = await domtoimage.default.toPng(graficaGen, {
-        scale: 2,
-        bgcolor: "#f9fafb",
-      });
-      const imgHeight1 = (graficaGen.offsetHeight * 2 * contentWidth) / (graficaGen.offsetWidth * 2);
-      if (y + imgHeight1 > 280) { doc.addPage(); y = 15; }
-      doc.addImage(img1, "PNG", margin, y, contentWidth, imgHeight1);
-      y += imgHeight1 + 10;
-    } catch (err) {
-      console.error("Error capturando gráfica 1:", err);
-    }
-  }
-
-  // ── Gráfica 2 — Ingreso ──
-  doc.setTextColor(...negro);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("Ingreso pronosticado ($MXN)", margin, y);
-  y += 4;
-
-  const graficaIng = document.getElementById("grafica-ingreso");
-  if (graficaIng) {
-    try {
-      const img2 = await domtoimage.default.toPng(graficaIng, {
-        scale: 2,
-        bgcolor: "#f9fafb",
-      });
-      const imgHeight2 = (graficaIng.offsetHeight * 2 * contentWidth) / (graficaIng.offsetWidth * 2);
-      if (y + imgHeight2 > 280) { doc.addPage(); y = 15; }
-      doc.addImage(img2, "PNG", margin, y, contentWidth, imgHeight2);
-      y += imgHeight2 + 10;
-    } catch (err) {
-      console.error("Error capturando gráfica 2:", err);
-    }
-  }
-
-  // ── Pie de página ──
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
+    // ── Encabezado ──
     doc.setFillColor(...amarillo);
-    doc.rect(0, 287, 210, 10, "F");
+    doc.rect(0, 0, 210, 28, "F");
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8);
-    doc.text("Solar POWER · Reporte de Factibilidad Fotovoltaica", margin, 293);
-    doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, 293, { align: "right" });
-  }
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("Reporte de Factibilidad Fotovoltaica", margin, 12);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text("Solar POWER · NASA POWER · CENACE", margin, 19);
+    doc.text(`Generado el ${new Date().toLocaleDateString("es-MX")}`, pageWidth - margin, 19, { align: "right" });
+    y = 36;
 
-  doc.save(`reporte_factibilidad_${nodo}_${start}_${end}.pdf`);
-};
+    // ── Parámetros del sistema ──
+    doc.setTextColor(...negro);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Parámetros del sistema", margin, y);
+    y += 6;
+
+    const params: [string, string][] = [
+      ["Nodo", nodo],
+      ["Ubicación", `${lat?.toFixed(4)}°N, ${lon?.toFixed(4)}°W`],
+      ["Período analizado", `${start} al ${end}`],
+      ["Semana activa", `${semanas[semanaActiva]?.inicio} al ${semanas[semanaActiva]?.fin}`],
+      ["Capacidad instalada", `${capacidad} kW`],
+      ["Eficiencia", `${eficiencia} %`],
+      ["Tipo de cambio", `$${calculos.tipoCambio} MXN/USD`],
+    ];
+
+    params.forEach(([label, value], i) => {
+      const bgColor: [number, number, number] = i % 2 === 0 ? grisClaro : [255, 255, 255];
+      doc.setFillColor(...bgColor);
+      doc.rect(margin, y, contentWidth, 7, "F");
+      doc.setTextColor(...grisTexto);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(label, margin + 3, y + 5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...negro);
+      doc.text(value ?? "—", margin + 60, y + 5);
+      y += 7;
+    });
+
+    y += 8;
+
+    // ── Resultados financieros ──
+    doc.setTextColor(...negro);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Resultados financieros", margin, y);
+    y += 6;
+
+    const totalSemanaData = totalSemana;
+
+    const financieros: [string, string][] = [
+      ["Generación total semana", `${totalSemanaData.generacion} kWh`],
+      ["Ingreso total semana", `$${totalSemanaData.ingreso} MXN`],
+      ["Ingreso mensual estimado", `$${calculos.ingresoMes} MXN`],
+      ["Ingreso anual estimado", `$${calculos.ingresoAnual} MXN`],
+      ["Costo de instalación", `$${calculos.costoInstalacion} MXN`],
+      ["Años de retorno de inversión", `${calculos.anosRetorno} años`],
+    ];
+
+    financieros.forEach(([label, value], i) => {
+      const isLast = i === financieros.length - 1;
+      const bgColor: [number, number, number] = isLast
+        ? [254, 243, 199]
+        : i % 2 === 0 ? grisClaro : [255, 255, 255];
+      doc.setFillColor(...bgColor);
+      doc.rect(margin, y, contentWidth, 7, "F");
+      doc.setTextColor(...grisTexto);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(label, margin + 3, y + 5);
+      doc.setFont("helvetica", isLast ? "bold" : "normal");
+      doc.setTextColor(
+        isLast ? 180 : negro[0],
+        isLast ? 83 : negro[1],
+        isLast ? 9 : negro[2]
+      );
+      doc.text(value, margin + 90, y + 5);
+      y += 7;
+    });
+
+    y += 10;
+
+    // ── Gráfica 1 — Generación ──
+    doc.setTextColor(...negro);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Generación pronosticada (kWh)", margin, y);
+    y += 4;
+
+    const graficaGen = document.getElementById("grafica-generacion");
+    if (graficaGen) {
+      try {
+        const img1 = await domtoimage.default.toPng(graficaGen, {
+          scale: 2,
+          bgcolor: "#f9fafb",
+        });
+        const imgHeight1 = (graficaGen.offsetHeight * 2 * contentWidth) / (graficaGen.offsetWidth * 2);
+        if (y + imgHeight1 > 280) { doc.addPage(); y = 15; }
+        doc.addImage(img1, "PNG", margin, y, contentWidth, imgHeight1);
+        y += imgHeight1 + 10;
+      } catch (err) {
+        console.error("Error capturando gráfica 1:", err);
+      }
+    }
+
+    // ── Gráfica 2 — Ingreso ──
+    doc.setTextColor(...negro);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Ingreso pronosticado ($MXN)", margin, y);
+    y += 4;
+
+    const graficaIng = document.getElementById("grafica-ingreso");
+    if (graficaIng) {
+      try {
+        const img2 = await domtoimage.default.toPng(graficaIng, {
+          scale: 2,
+          bgcolor: "#f9fafb",
+        });
+        const imgHeight2 = (graficaIng.offsetHeight * 2 * contentWidth) / (graficaIng.offsetWidth * 2);
+        if (y + imgHeight2 > 280) { doc.addPage(); y = 15; }
+        doc.addImage(img2, "PNG", margin, y, contentWidth, imgHeight2);
+        y += imgHeight2 + 10;
+      } catch (err) {
+        console.error("Error capturando gráfica 2:", err);
+      }
+    }
+
+    // ── Pie de página ──
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFillColor(...amarillo);
+      doc.rect(0, 287, 210, 10, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.text("Solar POWER · Reporte de Factibilidad Fotovoltaica", margin, 293);
+      doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, 293, { align: "right" });
+    }
+
+    doc.save(`reporte_factibilidad_${nodo}_${start}_${end}.pdf`);
+  };
 
 
 
@@ -1090,7 +1116,7 @@ const generarPDF = async () => {
 
                 {/* ── Sección de ubicación ── */}
                 <div className="space-y-4">
-                  <SectionLabel number="01" label="Ubicación" />
+                  <SectionLabel number="1" label="Ubicación" />
 
                   {/* Estado y Municipio */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1121,7 +1147,7 @@ const generarPDF = async () => {
 
                   {/* ── Sección de período ── */}
                   <div className="space-y-3">
-                    <SectionLabel number="01.1" label="Período de tiempo" />
+                    <SectionLabel number="2" label="Período de tiempo" />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="text-xs text-gray-400">Fecha inicio</label>
@@ -1353,7 +1379,7 @@ const generarPDF = async () => {
               <div className="space-y-6">
                 {/*titulo*/}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-amber-400">03</span>
+                  <span className="text-xs font-medium text-amber-400">3</span>
                   <span className="text-sm font-medium text-gray-700">Selección de nodo</span>
                 </div>
 
@@ -1536,7 +1562,7 @@ const generarPDF = async () => {
 
             {/* ── 04 Características del sistema ── */}
             <div className="border-t border-gray-100 pt-8 space-y-6">
-              <SectionLabel number="04" label="Características del sistema fotovoltaico" />
+              <SectionLabel number="4" label="Características del sistema fotovoltaico" />
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-1">
@@ -1625,7 +1651,7 @@ const generarPDF = async () => {
                     <p className="text-xs font-medium text-gray-500">
                       Ingreso pronosticado ($MXN) — promedio horario semanal
                     </p>
-                    <div  id="grafica-ingreso"  className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                    <div id="grafica-ingreso" className="rounded-xl border border-gray-100 bg-gray-50 p-4">
                       <ResponsiveContainer width="100%" height={260}>
                         <LineChart data={datosFactibilidad} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -2213,7 +2239,7 @@ function ColIrradiancia({
 
       {/* ── Sección de ubicación ── */}
       <div className="space-y-4">
-        <SectionLabel number="01" label="Ubicación" />
+        <SectionLabel number="1" label="Ubicación" />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
@@ -2286,7 +2312,7 @@ function ColIrradiancia({
 
       {/* ── Período ── */}
       <div className="space-y-3">
-        <SectionLabel number="02" label="Período de tiempo" />
+        <SectionLabel number="2" label="Período de tiempo" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-xs text-gray-400">Fecha inicio</label>
@@ -2374,7 +2400,7 @@ function ColIrradiancia({
                           <td key={col} className={`px-4 py-2.5 tabular-nums whitespace-nowrap ${row[col] === -999 ? "text-gray-300 italic" :
                             col === "ALLSKY_SFC_SW_DWN" ? "text-amber-500 font-medium" : "text-gray-600"
                             }`}>
-                            {row[col] === -999 || row[col] === -0.999  ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
+                            {row[col] === -999 || row[col] === -0.999 ? "No disponible" : row[col] != null ? String(row[col]) : "—"}
                           </td>
                         ))}
                       </tr>
