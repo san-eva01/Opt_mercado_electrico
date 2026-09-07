@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
-// @ts-ignore
 import "leaflet/dist/leaflet.css";
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;

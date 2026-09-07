@@ -5,9 +5,13 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer
+  Tooltip, ResponsiveContainer, BarChart, Bar
 } from "recharts";
 import { supabase } from "../lib/supabase";
+import { MESES, MESES_CORTOS, unirDatosAnuales, agruparMeses, agruparDias, calcularSeparacion } from "../lib/factibilidad";
+import type { DatoAnual, DatoMensual, DatoDiario, PrecioHorario } from "../lib/factibilidad";
+
+const DiagramaPaneles = dynamic(() => import("../components/DiagramaPaneles"), { ssr: false });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 //declare module "dom-to-image-more";
@@ -44,10 +48,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 
 
+type Vista = "normal" | "graficas" | "comparar-nodos" | "comparar-irradiancia";
+
 export default function Home() {
 
 
-  type Vista = "normal" | "graficas" | "comparar-nodos" | "comparar-irradiancia";
+
   const [vista, setVista] = useState<Vista>("normal");
   const [modoUbicacion, setModoUbicacion] = useState<"compartida" | "distinta">("compartida");
 
@@ -376,10 +382,69 @@ export default function Home() {
 
   //estados del sistema fotovoltaico
   const [capacidad, setCapacidad] = useState<number | "">("");
-  const [eficiencia, setEficiencia] = useState<number | "">("");
+  const [eficiencia, setEficiencia] = useState<number | "">(0.8); // Eficiencia como factor: 0.8 equivale a 80%.
   const [tipoCambio, setTipoCambio] = useState<number | null>(null);
   const [loadingTipoCambio, setLoadingTipoCambio] = useState(false);
-  const [semanaActiva, setSemanaActiva] = useState(0); // índice de semana visible
+  const [alturaPanel, setAlturaPanel] = useState<number>(1.0);
+  const [mesSeleccionadoGeneracion, setMesSeleccionadoGeneracion] = useState<number | null>(null);
+  const [mesSeleccionadoIngreso, setMesSeleccionadoIngreso] = useState<number | null>(null);
+  const [consultaAnual, setConsultaAnual] = useState<{ clave: string; solar: SolarResponse; precios: PrecioHorario[] } | null>(null);
+  const [loadingAnual, setLoadingAnual] = useState(false);
+  const [errorAnual, setErrorAnual] = useState<string | null>(null);
+  const [exportandoPDF, setExportandoPDF] = useState(false);
+  const [errorPDF, setErrorPDF] = useState<string | null>(null);
+  const solicitudAnual = useRef(0);
+  // UTC evita que el 1 de enero se interprete como el año anterior en México.
+  const targetYear = new Date(start).getUTCFullYear();
+  const inicioAnual = Number.isFinite(targetYear) ? `${targetYear}-01-01` : "";
+  const finAnual = Number.isFinite(targetYear) ? `${targetYear}-12-31` : "";
+  const claveAnual = JSON.stringify([lat, lon, targetYear, nodo]);
+  const anualVigente = consultaAnual?.clave === claveAnual;
+
+  const fetchFactibilidadAnual = async () => {
+    if (lat === null || lon === null || !inicioAnual || !nodo) return;
+    const solicitud = ++solicitudAnual.current;
+    setLoadingAnual(true);
+    setErrorAnual(null);
+    setConsultaAnual(null);
+    try {
+      const fetchSolarAnual = async (): Promise<SolarResponse> => {
+        const res = await fetch(`${API_URL}/api/solar-data`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat, lon, start: inicioAnual.replace(/-/g, ""), end: finAnual.replace(/-/g, "") }),
+        });
+        if (!res.ok) throw new Error("No se pudo consultar la irradiancia del año completo.");
+        return res.json();
+      };
+      const fetchMdaAnual = async (): Promise<PrecioHorario[]> => {
+        const registros: PrecioHorario[] = [];
+        const pageSize = 1000;
+        // Paginar hasta una página vacía: incluso un límite del servidor menor a 1000 no trunca el año.
+        for (let offset = 0; ; ) {
+          const { data, error } = await supabase.from("MDA")
+            .select("FECHA, HORA, PRECIO_MARGINAL_LOCAL")
+            .eq("CLAVE_NODO", nodo).gte("FECHA", inicioAnual).lte("FECHA", finAnual)
+            .order("FECHA", { ascending: true }).order("HORA", { ascending: true })
+            .order("PRECIO_MARGINAL_LOCAL", { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (error) throw new Error("No se pudieron consultar los precios MDA del año completo.");
+          if (!data?.length) break;
+          registros.push(...data.map((r) => ({ fecha: String(r.FECHA), hora: Number(r.HORA), precio: r.PRECIO_MARGINAL_LOCAL == null ? NaN : Number(r.PRECIO_MARGINAL_LOCAL) })));
+          offset += data.length;
+        }
+        return registros;
+      };
+      const [solar, preciosAnuales] = await Promise.all([fetchSolarAnual(), fetchMdaAnual()]);
+      // Validar conflictos de precio antes de publicar los datos en React.
+      unirDatosAnuales(solar.preview, preciosAnuales, targetYear, 1, 1);
+      if (solicitud === solicitudAnual.current) setConsultaAnual({ clave: claveAnual, solar, precios: preciosAnuales });
+    } catch (err: unknown) {
+      if (solicitud === solicitudAnual.current) setErrorAnual(err instanceof Error ? err.message : "Error consultando el año completo.");
+    } finally {
+      if (solicitud === solicitudAnual.current) setLoadingAnual(false);
+    }
+  };
 
 
 
@@ -411,9 +476,6 @@ export default function Home() {
     fetchTipoCambio();
   }, []);
 
-  useEffect(() => {
-    setSemanaActiva(0);
-  }, [start, end]);
 
   const toNasaDate = (d: string) => d.replace(/-/g, "");
 
@@ -492,164 +554,38 @@ export default function Home() {
 
 
 
-  // Calcula cuántas semanas hay entre start y end
-  const semanas = useMemo(() => {
-    if (!start || !end || !result || !precios.length) return [];
+  const datosFactibilidadAnual = useMemo<DatoAnual[]>(() => {
+    if (!anualVigente || !consultaAnual || capacidad === "" || eficiencia === "" ||
+      !Number.isFinite(capacidad) || capacidad < 0 || !Number.isFinite(eficiencia) || eficiencia < 0 || eficiencia > 1) return [];
+    return unirDatosAnuales(consultaAnual.solar.preview, consultaAnual.precios, targetYear, capacidad, eficiencia);
+  }, [anualVigente, consultaAnual, capacidad, eficiencia, targetYear]);
 
-    const fechaInicio = new Date(start);
-    const fechaFin = new Date(end);
-    const totalDias = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const totalSemanas = Math.ceil(totalDias / 7);
+  const datosGeneracionMensual = useMemo<DatoMensual[]>(() => agruparMeses(datosFactibilidadAnual), [datosFactibilidadAnual]);
+  const ingresoTotalAnual = useMemo<number>(() => datosGeneracionMensual.reduce((sum, row) => sum + row.ingreso, 0), [datosGeneracionMensual]);
+  const generacionTotalAnual = useMemo<number>(() => datosGeneracionMensual.reduce((sum, row) => sum + row.generacion, 0), [datosGeneracionMensual]);
+  const datosGeneracionDiaria = useMemo<DatoDiario[]>(() => agruparDias(datosFactibilidadAnual, mesSeleccionadoGeneracion, targetYear), [datosFactibilidadAnual, mesSeleccionadoGeneracion, targetYear]);
+  const datosIngresoDiario = useMemo<DatoDiario[]>(() => agruparDias(datosFactibilidadAnual, mesSeleccionadoIngreso, targetYear), [datosFactibilidadAnual, mesSeleccionadoIngreso, targetYear]);
+  const horasEsperadas = (Date.UTC(targetYear + 1, 0, 1) - Date.UTC(targetYear, 0, 1)) / 3600000;
+  const coberturaCompleta = datosFactibilidadAnual.length === horasEsperadas;
 
-    return Array.from({ length: totalSemanas }, (_, i) => {
-      const inicioSemana = new Date(fechaInicio);
-      inicioSemana.setDate(inicioSemana.getDate() + i * 7);
-      const finSemana = new Date(inicioSemana);
-      finSemana.setDate(finSemana.getDate() + 6);
-      return {
-        inicio: inicioSemana.toISOString().slice(0, 10),
-        fin: finSemana > fechaFin ? fechaFin.toISOString().slice(0, 10) : finSemana.toISOString().slice(0, 10),
-      };
-    });
-  }, [start, end, result, precios]);
+  const calculos = useMemo<{ costoInstalacion: string; ingresoAnual: string; anosRetorno: string; tipoCambio: string } | null>(() => {
+    if (!coberturaCompleta || capacidad === "" || eficiencia === "" || !tipoCambio || !Number.isFinite(tipoCambio) || tipoCambio <= 0) return null;
+    const costoInstalacion = (capacidad * 1000) * eficiencia * tipoCambio;
+    const anosRetorno = ingresoTotalAnual > 0 ? costoInstalacion / ingresoTotalAnual : null;
+    return { costoInstalacion: costoInstalacion.toFixed(2), ingresoAnual: ingresoTotalAnual.toFixed(2), anosRetorno: anosRetorno === null ? "Sin retorno" : anosRetorno.toFixed(anosRetorno > 0 && anosRetorno < 0.1 ? 4 : 1), tipoCambio: tipoCambio.toFixed(2) };
+  }, [coberturaCompleta, capacidad, eficiencia, tipoCambio, ingresoTotalAnual]);
 
-  //Calcular datos de generación e ingreso por semana activa
-  const datosFactibilidad = useMemo(() => {
-    if (!semanas.length || !result || !precios.length || capacidad === "" || eficiencia === "") return [];
-    console.log("Semanas calculadas:", semanas);
-    //const semana = semanas[semanaActiva];
-
-    const semana = semanas[semanaActiva];
-    if (!semana) return [];
-
-    // Filtrar irradiancia de la semana activa
-    const irradianciaFiltrada = result.preview.filter((row) => {
-      const fecha = (row["datetime"] as string).slice(0, 10);
-      return fecha >= semana.inicio && fecha <= semana.fin;
-    });
-
-    // Filtrar precios de la semana activa
-    const preciosFiltrados = precios.filter((p) => p.fecha >= semana.inicio && p.fecha <= semana.fin);
-
-    // Agrupar por hora del día (0-23) y promediar
-    const porHora = Array.from({ length: 24 }, (_, hora) => {
-      const irradianciaHora = irradianciaFiltrada
-        .filter((r) => {
-          const h = parseInt((r["datetime"] as string).slice(11, 13));
-          return h === hora;
-        })
-        .map((r) => r["ALLSKY_SFC_SW_DWN"] as number)
-        .filter((v) => v !== -999);
-
-      const preciosHora = preciosFiltrados
-        .filter((p) => p.hora === hora)
-        .map((p) => p.precio);
-
-      const irradianciaPromedio = irradianciaHora.length
-        ? irradianciaHora.reduce((a, b) => a + b, 0) / irradianciaHora.length
-        : 0;
-
-      const precioPromedio = preciosHora.length
-        ? preciosHora.reduce((a, b) => a + b, 0) / preciosHora.length
-        : 0;
-
-      // Generación (kWh) = Irradiancia × Capacidad × (Eficiencia / 100)
-      const generacion = (irradianciaPromedio === -999 || irradianciaPromedio === -0.999)
-        ? 0
-        : irradianciaPromedio * (capacidad as number) * ((eficiencia as number) / 100);
-      console.log("Hora %d: Irradiancia %.2f W/m², Generación %.4f kWh, Precio %.2f $/MWh", hora, irradianciaPromedio, generacion, precioPromedio, ((eficiencia as number) / 100));
-
-      // Ingreso ($) = Generación (kWh) × Precio ($/MWh) * 1000
-      const ingreso = generacion * (precioPromedio * (1 / 1000));
-      console.log("Hora %d: Ingreso %.2f $", hora, ingreso);
-
-      return {
-        hora: `${String(hora).padStart(2, "0")}:00`,
-        generacion: parseFloat(generacion.toFixed(4)),
-        ingreso: parseFloat(ingreso.toFixed(4)),
-        irradiancia: parseFloat(irradianciaPromedio.toFixed(4)),
-        precio: parseFloat(precioPromedio.toFixed(4)),
-      };
-    });
-
-    return porHora;
-  }, [semanas, semanaActiva, result, precios, capacidad, eficiencia]);
-
-  const totalSemana = useMemo(() => {
-    if (!datosFactibilidad.length) return null;
-    return {
-      generacion: datosFactibilidad.reduce((acc, r) => acc + r.generacion, 0).toFixed(4),
-      ingreso: datosFactibilidad.reduce((acc, r) => acc + r.ingreso, 0).toFixed(4),
-    };
-  }, [datosFactibilidad]);
-
-const ingresoTotalPeriodo = useMemo(() => {
-  if (!semanas.length || !result || !precios.length || capacidad === "" || eficiencia === "") return 0;
-
-  // Recorre TODAS las semanas, no solo la activa
-  return semanas.reduce((totalAcc, semana) => {
-
-    const irradianciaFiltrada = result.preview.filter((row) => {
-      const fecha = (row["datetime"] as string).slice(0, 10);
-      return fecha >= semana.inicio && fecha <= semana.fin;
-    });
-
-    const preciosFiltrados = precios.filter((p) =>
-      p.fecha >= semana.inicio && p.fecha <= semana.fin
-    );
-
-    const ingresoSemana = Array.from({ length: 24 }, (_, hora) => {
-      const irradianciaHora = irradianciaFiltrada
-        .filter((r) => parseInt((r["datetime"] as string).slice(11, 13)) === hora)
-        .map((r) => r["ALLSKY_SFC_SW_DWN"] as number)
-        .filter((v) => v !== -999 && v !== -0.999);
-
-      const preciosHora = preciosFiltrados
-        .filter((p) => p.hora === hora)
-        .map((p) => p.precio);
-
-      const irradianciaPromedio = irradianciaHora.length
-        ? irradianciaHora.reduce((a, b) => a + b, 0) / irradianciaHora.length
-        : 0;
-
-      const precioPromedio = preciosHora.length
-        ? preciosHora.reduce((a, b) => a + b, 0) / preciosHora.length
-        : 0;
-
-      const generacion = irradianciaPromedio * (capacidad as number) * ((eficiencia as number) / 100);
-      return generacion * precioPromedio / 1000;
-    }).reduce((a, b) => a + b, 0);
-
-    return totalAcc + ingresoSemana;
-  }, 0);
-}, [semanas, result, precios, capacidad, eficiencia]); // ← sin semanaActiva
-
-
-  //calcular inversion y retorno
-const calculos = useMemo(() => {
-  if (capacidad === "" || eficiencia === "" || !tipoCambio || !ingresoTotalPeriodo) return null;
-
-  const costoInstalacion = (capacidad as number) * ((eficiencia as number) / 100) * tipoCambio;
-
-  // Ingreso del período completo — ya no depende de semanaActiva
-  const ingresoMes = ingresoTotalPeriodo;
-
-  const mesesPeriodo =
-    (new Date(end).getFullYear() - new Date(start).getFullYear()) * 12 +
-    (new Date(end).getMonth() - new Date(start).getMonth()) + 1;
-
-  const multiplicador = 12 / mesesPeriodo;
-  const ingresoAnual = ingresoMes * multiplicador;
-  const anosRetorno = ingresoAnual > 0 ? costoInstalacion / ingresoAnual : null;
-
-  return {
-    costoInstalacion: costoInstalacion.toFixed(2),
-    ingresoMes: ingresoMes.toFixed(2),
-    ingresoAnual: ingresoAnual.toFixed(2),
-    anosRetorno: anosRetorno ? anosRetorno.toFixed(1) : "—",
-    tipoCambio: tipoCambio.toFixed(2),
-  };
-}, [capacidad, eficiencia, tipoCambio, ingresoTotalPeriodo, start, end]);
+  const { orientation, tiltAnual, tiltVerano, tiltInvierno, tiltPromedio } = useMemo(() => {
+    const tiltAnual = Math.abs(lat ?? 0);
+    const tiltVerano = tiltAnual - 15;
+    const tiltInvierno = tiltAnual + 15;
+    return { orientation: (lat ?? 0) >= 0 ? "Sur" : "Norte", tiltAnual, tiltVerano, tiltInvierno, tiltPromedio: (tiltVerano + tiltInvierno) / 2 };
+  }, [lat]);
+  const { H, d } = useMemo<{ H: number; d: number }>(() => {
+    if (lat === null) return { H: 0, d: 0 };
+    return calcularSeparacion(lat, alturaPanel, tiltAnual);
+  }, [lat, alturaPanel, tiltAnual]);
+  const separacionValida = lat !== null && H > 0 && Number.isFinite(d) && d > 0 && alturaPanel >= 0.1;
 
   // ── Handlers de ubicación ─────────────────────────────────────────────────
   const handleEstadoChange = async (value: string) => {
@@ -777,7 +713,7 @@ const calculos = useMemo(() => {
   // ── Consulta NASA POWER ───────────────────────────────────────────────────
   //consulta vista normal
   const handleSubmit = async () => {
-    if (!lat || !lon) return setError("Selecciona un punto en el mapa o ingresa una ubicación.");
+    if (lat === null || lon === null) return setError("Selecciona un punto en el mapa o ingresa una ubicación.");
     if (!start || !end) return setError("Selecciona el rango de fechas.");
     if (start > end) return setError("La fecha inicio debe ser anterior a la fecha fin.");
 
@@ -896,171 +832,131 @@ const calculos = useMemo(() => {
   }));
 
   const generarPDF = async () => {
-    if (!calculos || !datosFactibilidad.length || !totalSemana) return;
-
-    const domtoimage = (await import("dom-to-image-more")) as any;
-
-    const { default: jsPDF } = await import("jspdf");
-
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const pageWidth = 210;
-    const margin = 15;
-    const contentWidth = pageWidth - margin * 2;
-    let y = 15;
-
-    const amarillo: [number, number, number] = [245, 158, 11];
-    const grisClaro: [number, number, number] = [249, 250, 251];
-    const grisTexto: [number, number, number] = [75, 85, 99];
-    const negro: [number, number, number] = [17, 24, 39];
-
-    // ── Encabezado ──
-    doc.setFillColor(...amarillo);
-    doc.rect(0, 0, 210, 28, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.text("Reporte de Factibilidad Fotovoltaica", margin, 12);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.text("Solar POWER · NASA POWER · CENACE", margin, 19);
-    doc.text(`Generado el ${new Date().toLocaleDateString("es-MX")}`, pageWidth - margin, 19, { align: "right" });
-    y = 36;
-
-    // ── Parámetros del sistema ──
-    doc.setTextColor(...negro);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("Parámetros del sistema", margin, y);
-    y += 6;
-
-    const params: [string, string][] = [
-      ["Nodo", nodo],
-      ["Ubicación", `${lat?.toFixed(4)}°N, ${lon?.toFixed(4)}°W`],
-      ["Período analizado", `${start} al ${end}`],
-      ["Semana activa", `${semanas[semanaActiva]?.inicio} al ${semanas[semanaActiva]?.fin}`],
-      ["Capacidad instalada", `${capacidad} kW`],
-      ["Eficiencia", `${eficiencia} %`],
-      ["Tipo de cambio", `$${calculos.tipoCambio} MXN/USD`],
-    ];
-
-    params.forEach(([label, value], i) => {
-      const bgColor: [number, number, number] = i % 2 === 0 ? grisClaro : [255, 255, 255];
-      doc.setFillColor(...bgColor);
-      doc.rect(margin, y, contentWidth, 7, "F");
-      doc.setTextColor(...grisTexto);
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      doc.text(label, margin + 3, y + 5);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(...negro);
-      doc.text(value ?? "—", margin + 60, y + 5);
-      y += 7;
-    });
-
-    y += 8;
-
-    // ── Resultados financieros ──
-    doc.setTextColor(...negro);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("Resultados financieros", margin, y);
-    y += 6;
-
-    const totalSemanaData = totalSemana;
-
-    const financieros: [string, string][] = [
-      ["Generación total semana", `${totalSemanaData.generacion} kWh`],
-      ["Ingreso total semana", `$${totalSemanaData.ingreso} MXN`],
-      ["Ingreso mensual estimado", `$${calculos.ingresoMes} MXN`],
-      ["Ingreso anual estimado", `$${calculos.ingresoAnual} MXN`],
-      ["Costo de instalación", `$${calculos.costoInstalacion} MXN`],
-      ["Años de retorno de inversión", `${calculos.anosRetorno} años`],
-    ];
-
-    financieros.forEach(([label, value], i) => {
-      const isLast = i === financieros.length - 1;
-      const bgColor: [number, number, number] = isLast
-        ? [254, 243, 199]
-        : i % 2 === 0 ? grisClaro : [255, 255, 255];
-      doc.setFillColor(...bgColor);
-      doc.rect(margin, y, contentWidth, 7, "F");
-      doc.setTextColor(...grisTexto);
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      doc.text(label, margin + 3, y + 5);
-      doc.setFont("helvetica", isLast ? "bold" : "normal");
-      doc.setTextColor(
-        isLast ? 180 : negro[0],
-        isLast ? 83 : negro[1],
-        isLast ? 9 : negro[2]
-      );
-      doc.text(value, margin + 90, y + 5);
-      y += 7;
-    });
-
-    y += 10;
-
-    // ── Gráfica 1 — Generación ──
-    doc.setTextColor(...negro);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("Generación pronosticada (kWh)", margin, y);
-    y += 4;
-
-    const graficaGen = document.getElementById("grafica-generacion");
-    if (graficaGen) {
-      try {
-        const img1 = await domtoimage.default.toPng(graficaGen, {
-          scale: 2,
-          bgcolor: "#f9fafb",
+    if (!calculos || !coberturaCompleta || !separacionValida || exportandoPDF) return;
+    setExportandoPDF(true);
+    setErrorPDF(null);
+    try {
+      const domtoimage = await import("dom-to-image-more");
+      const { default: jsPDF } = await import("jspdf");
+      // Capturar antes de generar el documento: un error no entrega un reporte incompleto.
+      const imagenes = await Promise.all(["diagrama-paneles", "grafica-generacion", "grafica-ingreso"].map(async (id) => {
+        const el = document.getElementById(id);
+        if (!el) throw new Error("No se encontró " + id + ". Espera a que termine de cargar e intenta de nuevo.");
+        // Esta versión de dom-to-image-more impone un namespace HTML al nodo raíz.
+        // Capturar el contenedor conserva el namespace del SVG interior.
+        const captureEl = el instanceof SVGElement ? el.parentElement : el;
+        if (!captureEl) throw new Error("No se encontró el contenedor de " + id);
+        const bounds = captureEl.getBoundingClientRect();
+        if (!bounds.width || !bounds.height) throw new Error("La imagen " + id + " no es visible.");
+        const png = await domtoimage.default.toPng(captureEl, {
+          scale: 2, bgcolor: "#ffffff",
+          onclone: (clone) => {
+            // El foco y los tooltips siguen disponibles en pantalla, pero no forman parte del reporte.
+            clone.querySelectorAll<HTMLElement | SVGElement>(".recharts-wrapper, .recharts-surface").forEach((node) => { node.style.outline = "none"; });
+            clone.querySelectorAll<HTMLElement>(".recharts-tooltip-wrapper").forEach((node) => { node.style.display = "none"; });
+          },
         });
-        const imgHeight1 = (graficaGen.offsetHeight * 2 * contentWidth) / (graficaGen.offsetWidth * 2);
-        if (y + imgHeight1 > 280) { doc.addPage(); y = 15; }
-        doc.addImage(img1, "PNG", margin, y, contentWidth, imgHeight1);
-        y += imgHeight1 + 10;
-      } catch (err) {
-        console.error("Error capturando gráfica 1:", err);
+        return { png, ratio: bounds.height / bounds.width };
+      }));
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const margin = 15;
+      const contentWidth = 180;
+      let y = 36;
+      const espacio = (height: number) => {
+        if (y + height > 270) { doc.addPage(); y = 15; }
+      };
+      const titulo = (text: string) => {
+        espacio(20);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(17, 24, 39);
+        doc.text(text, margin, y); y += 7;
+      };
+      const tabla = (headers: string[], rows: string[][], widths: number[]) => {
+        const fila = (cells: string[], header: boolean, index: number) => {
+          doc.setFontSize(9);
+          doc.setFont("helvetica", header ? "bold" : "normal");
+          const lines = cells.map((cell, i) => doc.splitTextToSize(cell, widths[i] - 6) as string[]);
+          const height = Math.max(8, ...lines.map((line) => line.length * 4 + 4));
+          if (y + height > 270) {
+            doc.addPage(); y = 15;
+            if (!header) fila(headers, true, 0);
+          }
+          if (header) doc.setFillColor(245, 158, 11);
+          else if (index % 2 === 0) doc.setFillColor(249, 250, 251);
+          else doc.setFillColor(255, 255, 255);
+          doc.rect(margin, y, contentWidth, height, "F");
+          doc.setTextColor(header ? 255 : 17, header ? 255 : 24, header ? 255 : 39);
+          doc.setFont("helvetica", header ? "bold" : "normal");
+          let x = margin;
+          lines.forEach((line, i) => { doc.text(line, x + 3, y + 5); x += widths[i]; });
+          y += height;
+        };
+        fila(headers, true, 0);
+        rows.forEach((row, i) => fila(row, false, i));
+        y += 9;
+      };
+      const imagen = (title: string, img: { png: string; ratio: number }) => {
+        const height = Math.min(contentWidth * img.ratio, 220);
+        const width = height / img.ratio;
+        espacio(height + 17); titulo(title);
+        doc.addImage(img.png, "PNG", margin + (contentWidth - width) / 2, y, width, height);
+        y += height + 10;
+      };
+      doc.setFillColor(245, 158, 11); doc.rect(0, 0, 210, 28, "F");
+      doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.setFont("helvetica", "bold");
+      doc.text("Reporte de Factibilidad Fotovoltaica", margin, 12);
+      doc.setFontSize(9); doc.setFont("helvetica", "normal");
+      doc.text("Solar POWER · NASA POWER · CENACE", margin, 19);
+      doc.text(new Date().toLocaleDateString("es-MX"), 195, 19, { align: "right" });
+
+      titulo("Parámetros del sistema");
+      tabla(["Campo", "Valor"], [
+        ["Nodo / Mercado", nodo + " / MDA"],
+        ["Ubicación (latitud, longitud)", lat?.toFixed(4) + "°, " + lon?.toFixed(4) + "°"],
+        ["Período analizado", inicioAnual + " al " + finAnual],
+        ["Capacidad instalada", capacidad + " kW"], ["Eficiencia", (eficiencia === "" ? "" : Number((eficiencia * 100).toFixed(8))) + " %"],
+        ["Tipo de cambio", calculos.tipoCambio + " MXN/USD"], ["Altura del panel", alturaPanel + " m"],
+      ], [90, 90]);
+      titulo("Inclinación y orientación de paneles");
+      tabla(["Campo", "Valor"], [
+        ["Orientación recomendada", orientation], ["Inclinación anual óptima", tiltAnual.toFixed(1) + "°"],
+        ["Inclinación en verano", tiltVerano.toFixed(1) + "°"], ["Inclinación en invierno", tiltInvierno.toFixed(1) + "°"],
+        ["Inclinación media anual", tiltPromedio.toFixed(1) + "°"],
+      ], [90, 90]);
+      titulo("Distancia mínima entre hileras");
+      tabla(["Campo", "Valor"], [
+        ["Ángulo de altura solar (gamma s)", H.toFixed(2) + "°"], ["Altura del panel (b)", alturaPanel + " m"],
+        ["Distancia mínima entre hileras", d.toFixed(2) + " m"],
+      ], [90, 90]);
+      espacio(14); doc.setFontSize(9); doc.setTextColor(75, 85, 99);
+      doc.text("Calculado para el 21 de diciembre a las 10h solar, condición más desfavorable.", margin, y); y += 12;
+      imagen("Diagrama de inclinación y separación", imagenes[0]);
+      imagen("Generación mensual (kWh)", imagenes[1]);
+      imagen("Ingreso mensual (MXN)", imagenes[2]);
+      titulo("Desglose mensual de generación e ingresos");
+      tabla(["Mes", "Generación (kWh)", "Ingreso ($MXN)"], [
+        ...datosGeneracionMensual.map((row) => [row.mes, row.generacion.toFixed(2), row.ingreso.toFixed(2)]),
+        ["Total anual", generacionTotalAnual.toFixed(2), ingresoTotalAnual.toFixed(2)],
+      ], [60, 60, 60]);
+      titulo("Resultados financieros");
+      tabla(["Campo", "Valor"], [
+        ["Costo de instalación (MXN)", calculos.costoInstalacion],
+        ["Ingreso anual estimado (MXN)", calculos.ingresoAnual],
+        ["Años de retorno de inversión", calculos.anosRetorno],
+      ], [100, 80]);
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i); doc.setFillColor(245, 158, 11); doc.rect(0, 287, 210, 10, "F");
+        doc.setFont("helvetica", "normal"); doc.setTextColor(255, 255, 255); doc.setFontSize(8);
+        doc.text("Solar POWER · Reporte de Factibilidad Fotovoltaica", margin, 293);
+        doc.text("Página " + i + " de " + totalPages, 195, 293, { align: "right" });
       }
+      doc.save("reporte_factibilidad_" + nodo + "_" + targetYear + ".pdf");
+    } catch (err: unknown) {
+      setErrorPDF(err instanceof Error ? err.message : "No se pudo generar el PDF. Intenta de nuevo.");
+    } finally {
+      setExportandoPDF(false);
     }
-
-    // ── Gráfica 2 — Ingreso ──
-    doc.setTextColor(...negro);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("Ingreso pronosticado ($MXN)", margin, y);
-    y += 4;
-
-    const graficaIng = document.getElementById("grafica-ingreso");
-    if (graficaIng) {
-      try {
-        const img2 = await domtoimage.default.toPng(graficaIng, {
-          scale: 2,
-          bgcolor: "#f9fafb",
-        });
-        const imgHeight2 = (graficaIng.offsetHeight * 2 * contentWidth) / (graficaIng.offsetWidth * 2);
-        if (y + imgHeight2 > 280) { doc.addPage(); y = 15; }
-        doc.addImage(img2, "PNG", margin, y, contentWidth, imgHeight2);
-        y += imgHeight2 + 10;
-      } catch (err) {
-        console.error("Error capturando gráfica 2:", err);
-      }
-    }
-
-    // ── Pie de página ──
-    const totalPages = doc.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      doc.setPage(i);
-      doc.setFillColor(...amarillo);
-      doc.rect(0, 287, 210, 10, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(8);
-      doc.text("Solar POWER · Reporte de Factibilidad Fotovoltaica", margin, 293);
-      doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, 293, { align: "right" });
-    }
-
-    doc.save(`reporte_factibilidad_${nodo}_${start}_${end}.pdf`);
   };
-
 
 
 
@@ -1582,9 +1478,9 @@ const calculos = useMemo(() => {
                     type="number"
                     min={0}
                     max={100}
-                    value={eficiencia}
-                    onChange={(e) => setEficiencia(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                    placeholder="Ej. 20"
+                    value={eficiencia === "" ? "" : Number((eficiencia * 100).toFixed(8))}
+                    onChange={(e) => setEficiencia(e.target.value === "" ? "" : parseFloat(e.target.value) / 100)}
+                    placeholder="Ej. 80"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400 transition-colors"
                   />
                 </div>
@@ -1599,110 +1495,120 @@ const calculos = useMemo(() => {
                 </div>
               </div>
 
-              {/* Gráficas de factibilidad — solo si hay datos */}
-              {datosFactibilidad.length > 0 && (
-                <div className="space-y-8">
+              <section className="border-t border-gray-100 pt-8 space-y-6">
+                <SectionLabel number="5" label="Generación e ingresos mensuales" />
+                <p className="text-sm text-gray-500">El análisis usa irradiancia y precios MDA del 1 de enero al 31 de diciembre del año de inicio, independientemente del rango de las consultas anteriores.</p>
+                <button onClick={fetchFactibilidadAnual} disabled={loadingAnual || lat === null || lon === null || !inicioAnual || !nodo}
+                  className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-white disabled:opacity-40">
+                  {loadingAnual ? "Consultando el año completo..." : "Consultar año completo"}{inicioAnual && !loadingAnual ? " · " + targetYear : ""}
+                </button>
+                {errorAnual && <p role="alert" className="text-sm text-red-600">{errorAnual}</p>}
+                {consultaAnual && !anualVigente && <p role="status" className="text-sm text-amber-700">Cambió la ubicación, el nodo o el año. Consulta de nuevo el año completo.</p>}
+                {anualVigente && !coberturaCompleta && <p role="status" className="text-sm text-amber-700">Cobertura: {datosFactibilidadAnual.length} de {horasEsperadas} horas válidas. Completa los parámetros del sistema; si faltan registros, no se calcula ROI anual ni se extrapolan ingresos.</p>}
+                {datosFactibilidadAnual.length > 0 && (
+                  <>
+                    <p className="text-xs text-gray-500">{inicioAnual} al {finAnual} · MDA · {coberturaCompleta ? "Cobertura anual completa" : "Datos parciales"}</p>
+                    {([
+                      { key: "generacion", title: "Generación", unit: "kWh", color: "#f59e0b", mes: mesSeleccionadoGeneracion, setMes: setMesSeleccionadoGeneracion, diario: datosGeneracionDiaria },
+                      { key: "ingreso", title: "Ingreso", unit: "MXN", color: "#3b82f6", mes: mesSeleccionadoIngreso, setMes: setMesSeleccionadoIngreso, diario: datosIngresoDiario },
+                    ] as const).map((grafica) => (
+                      <div key={grafica.key} className="space-y-3">
+                        <label className="flex flex-wrap items-center gap-3 text-sm text-gray-600" htmlFor={"mes-" + grafica.key}>
+                          {grafica.title}: detalle por mes
+                          <select id={"mes-" + grafica.key} value={grafica.mes ?? ""} onChange={(e) => grafica.setMes(e.target.value === "" ? null : Number(e.target.value))}
+                            className="rounded-lg border border-gray-200 bg-white p-2">
+                            <option value="">Sin detalle diario</option>
+                            {MESES.map((mes, i) => <option key={mes} value={i}>{mes}</option>)}
+                          </select>
+                        </label>
+                        <div id={"grafica-" + grafica.key} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                          <h3 className="mb-3 text-sm text-gray-600">{grafica.title} mensual ({grafica.unit}) · {targetYear}</h3>
+                          <ResponsiveContainer width="100%" height={280}>
+                            <BarChart data={datosGeneracionMensual} margin={{ top: 8, right: 16, left: 12, bottom: 20 }}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="mesIndex" tickFormatter={(v: number) => MESES_CORTOS[v]} tick={{ fontSize: 11 }} interval={0} />
+                              <YAxis width={75} tick={{ fontSize: 10 }} label={{ value: grafica.unit, angle: -90, position: "insideLeft" }} />
+                              <Tooltip labelFormatter={(v) => MESES[Number(v)]} formatter={(v) => [Number(v).toFixed(2) + " " + grafica.unit, grafica.title]} />
+                              <Bar dataKey={grafica.key} fill={grafica.color} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        {grafica.mes !== null && (
+                          <div className="rounded-xl border border-gray-100 p-4">
+                            <h3 className="mb-3 text-sm text-gray-600">{grafica.key === "ingreso" ? "Ingreso diario" : "Generación diaria"} · {MESES[grafica.mes]} ({grafica.unit})</h3>
+                            <ResponsiveContainer width="100%" height={240}>
+                              <LineChart data={grafica.diario} margin={{ top: 8, right: 16, left: 12, bottom: 20 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="dia" label={{ value: "Día", position: "insideBottom", offset: -10 }} />
+                                <YAxis width={75} tick={{ fontSize: 10 }} label={{ value: grafica.unit, angle: -90, position: "insideLeft" }} />
+                                <Tooltip labelFormatter={(v) => "Día " + v} formatter={(v) => [Number(v).toFixed(2) + " " + grafica.unit, grafica.title]} />
+                                <Line type="monotone" dataKey={grafica.key} stroke={grafica.color} dot={false} isAnimationActive={false} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {calculos && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="rounded-xl border border-gray-100 bg-gray-50 p-4"><p className="text-xs text-gray-500">Costo de instalación (MXN)</p><p className="text-lg font-semibold">$ {calculos.costoInstalacion}</p></div>
+                        <div className="rounded-xl border border-gray-100 bg-gray-50 p-4"><p className="text-xs text-gray-500">Ingreso anual estimado (MXN)</p><p className="text-lg font-semibold">$ {calculos.ingresoAnual}</p><p className="text-xs text-gray-500">Suma de los 12 meses</p></div>
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs text-amber-700">Retorno de inversión (años)</p><p className="text-lg font-semibold text-amber-700">{calculos.anosRetorno}</p></div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
 
-                  {/* Navegador de semanas */}
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => setSemanaActiva((s) => Math.max(0, s - 1))}
-                      disabled={semanaActiva === 0}
-                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:border-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      ← Semana anterior
-                    </button>
-                    <span className="text-xs text-gray-500">
-                      Semana {semanaActiva + 1} de {semanas.length} ·{" "}
-                      {semanas[semanaActiva]?.inicio} al {semanas[semanaActiva]?.fin}
-                    </span>
-                    <button
-                      onClick={() => setSemanaActiva((s) => Math.min(semanas.length - 1, s + 1))}
-                      disabled={semanaActiva === semanas.length - 1}
-                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:border-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Semana siguiente →
-                    </button>
-                  </div>
+              <section className="border-t border-gray-100 pt-8 space-y-4">
+                <SectionLabel number="6" label="Inclinación y orientación de los paneles" />
+                {lat === null ? <p className="text-sm text-gray-500">Selecciona una ubicación en el paso 1.</p> : (
+                  <>
+                    <dl className="grid sm:grid-cols-2 gap-4 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm">
+                      {[["Inclinación anual óptima", tiltAnual.toFixed(1) + "°"], ["Inclinación en verano", tiltVerano.toFixed(1) + "°"], ["Inclinación en invierno", tiltInvierno.toFixed(1) + "°"], ["Inclinación media anual", tiltPromedio.toFixed(1) + "°"], ["Orientación", orientation]].map(([label, value]) => <div key={label}><dt className="text-gray-500">{label}</dt><dd className="font-semibold text-gray-900">{value}</dd></div>)}
+                    </dl>
+                    <p className="text-sm text-gray-500">La inclinación anual se aproxima al valor absoluto de la latitud. El ajuste estacional resta 15° en verano y suma 15° en invierno. Los paneles se orientan hacia el ecuador: al sur en el hemisferio norte y al norte en el hemisferio sur. Estas recomendaciones geométricas no modifican el cálculo de generación.</p>
+                  </>
+                )}
+              </section>
 
-                  {/* Gráfica 1 — Generación pronosticada */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-500">
-                      Generación pronosticada (kWh) — promedio horario semanal
-                    </p>
-                    <div id="grafica-generacion" className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                      <ResponsiveContainer width="100%" height={260}>
-                        <LineChart data={datosFactibilidad} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis dataKey="hora" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
-                          <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} width={50} />
-                          <Tooltip
-                            contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
-                            formatter={(v) => [`${Number(v).toFixed(4)} kWh`, "Generación"]}
-                          />
-                          <Line type="monotone" dataKey="generacion" stroke="#f59e0b" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: "#f59e0b" }} />
-                        </LineChart>
-                      </ResponsiveContainer>
+              <section className="border-t border-gray-100 pt-8 space-y-4">
+                <SectionLabel number="7" label="Distancia mínima entre hileras de paneles" />
+                <label htmlFor="altura-panel" className="block text-sm text-gray-600">Altura del panel (m)</label>
+                <input id="altura-panel" type="number" min={0.1} step={0.1} value={alturaPanel} onChange={(e) => {
+                  const value = e.target.valueAsNumber;
+                  if (Number.isFinite(value)) setAlturaPanel(value);
+                }} className="w-40 rounded-lg border border-gray-200 px-3 py-2" />
+                {separacionValida ? (
+                  <>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-5 text-sm space-y-2">
+                      <p>Ángulo de altura solar (γs): <strong>{H.toFixed(2)}°</strong></p>
+                      <p>Distancia mínima entre hileras (d): <strong>{d.toFixed(2)} m</strong></p>
+                      <p className="text-gray-500">Calculado para el 21 de diciembre a las 10h solar, condición más desfavorable</p>
                     </div>
-                  </div>
+                    <div className="rounded-xl overflow-hidden border border-gray-100"><DiagramaPaneles beta={tiltAnual} gammaSolar={H} d={d} b={alturaPanel} /></div>
+                  </>
+                ) : <p role="status" className="text-sm text-amber-700">Selecciona una ubicación y una altura de al menos 0.1 m. La separación requiere una altura solar positiva.</p>}
+              </section>
 
-                  {/* Gráfica 2 — Ingreso pronosticado */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-500">
-                      Ingreso pronosticado ($MXN) — promedio horario semanal
-                    </p>
-                    <div id="grafica-ingreso" className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                      <ResponsiveContainer width="100%" height={260}>
-                        <LineChart data={datosFactibilidad} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis dataKey="hora" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
-                          <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} width={60} />
-                          <Tooltip
-                            contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px" }}
-                            formatter={(v) => [`$${Number(v).toFixed(4)}`, "Ingreso"]}
-                          />
-                          <Line type="monotone" dataKey="ingreso" stroke="#3b82f6" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: "#3b82f6" }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  {/* Inversión y retorno */}
-                  {calculos && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
-                        <p className="text-xs text-gray-400">¿Cuánto cuesta la instalación?</p>
-                        <p className="text-lg font-semibold text-gray-900">${calculos.costoInstalacion}</p>
-                        <p className="text-xs text-gray-400">kW · $ (T.C. ${calculos.tipoCambio} MXN/USD)</p>
-                      </div>
-                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
-                        <p className="text-xs text-gray-400">Ingreso total del mes</p>
-                        <p className="text-lg font-semibold text-gray-900">${calculos.ingresoMes}</p>
-                      </div>
-                      <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
-                        <p className="text-xs text-gray-400">Ingreso anual estimado</p>
-                        <p className="text-lg font-semibold text-gray-900">${calculos.ingresoAnual}</p>
-                        <p className="text-xs text-gray-400">Mes × 12</p>
-                      </div>
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-1">
-                        <p className="text-xs text-amber-600">¿En cuánto tiempo se recupera la inversión?</p>
-                        <p className="text-lg font-semibold text-amber-600">{calculos.anosRetorno} años</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Botón PDF */}
-                  {calculos && (
-                    <button
-                      onClick={generarPDF}
-                      className="w-full py-3 rounded-xl font-medium text-sm border border-gray-200 text-gray-600 hover:border-amber-400 hover:text-amber-500 transition-colors"
-                    >
-                      Generar reporte PDF →
-                    </button>
-                  )}
-
+              <section className="border-t border-gray-100 pt-8 space-y-4">
+                <SectionLabel number="8" label="¿Por qué considerar pérdidas del sistema?" />
+                <p className="text-sm text-gray-500">La energía aprovechable se reduce por pérdidas del sistema. La eficiencia representa el factor global de rendimiento; los siguientes valores típicos ilustran las pérdidas que pueden afectar la producción.</p>
+                <div className="overflow-x-auto rounded-xl border border-gray-200">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-[#f59e0b] text-white"><tr><th className="p-3">Factor de pérdida</th><th className="p-3">Impacto típico</th></tr></thead>
+                    <tbody>{[
+                      ["Temperatura", "Reducción de potencia del 3–10% según clima y temperatura del módulo"],
+                      ["Polvo y suciedad", "Pérdida de energía del 2–5% según entorno y mantenimiento"],
+                      ["Pérdidas del inversor", "Pérdidas de conversión del 1–3% según eficiencia del inversor"],
+                      ["Pérdidas en el cable", "1–2%: pérdida de transmisión según diseño del sistema"],
+                    ].map(([factor, impacto]) => <tr key={factor} className="odd:bg-gray-50 even:bg-gray-100"><th scope="row" className="p-3 font-medium">{factor}</th><td className="p-3">{impacto}</td></tr>)}</tbody>
+                  </table>
                 </div>
-              )}
+                <p className="text-sm text-gray-500">El 80% es el valor inicial editable y se utiliza como factor 0.8 en los cálculos. Ajusta la eficiencia según el equipo, el clima, el mantenimiento y las condiciones reales de instalación.</p>
+              </section>
+              {errorPDF && <p role="alert" className="text-sm text-red-600">{errorPDF}</p>}
+              {calculos && <button onClick={generarPDF} disabled={exportandoPDF || !separacionValida} className="w-full rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:border-amber-400 disabled:opacity-40">{exportandoPDF ? "Generando reporte..." : "Generar reporte PDF →"}</button>}
             </div>
           </div>
         )}
@@ -2005,9 +1911,9 @@ function NavBtn({
   setVista,
 }: {
   label: string;
-  value: string;
-  vista: string;
-  setVista: (v: any) => void;
+  value: Vista;
+  vista: Vista;
+  setVista: (v: Vista) => void;
 }) {
   const activo = vista === value;
   return (
