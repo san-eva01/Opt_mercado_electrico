@@ -16,7 +16,7 @@ Los registros se unen por fecha y hora, sin promedios semanales y sin redondear 
 
 - Generación horaria (kWh) = irradiancia horaria (kWh/m²) × capacidad (kW) × eficiencia.
 - Ingreso horario (MXN) = generación × precio MDA (MXN/MWh) / 1000.
-- Costo de instalación (MXN) = (capacidad × 1000) × eficiencia × tipo de cambio (MXN/USD), según la fórmula indicada por el usuario.
+- Costo de instalación (MXN) = capacidad (kW) × 1000 (W/kW) × 0.8 (USD/W) × tipo de cambio del campo (MXN/USD). El costo unitario 0.8 es fijo e independiente de la eficiencia energética.
 - Retorno (años) = costo de instalación / suma del ingreso anual.
 
 Si el ingreso anual es cero o negativo se muestra «Sin retorno». Los precios negativos son válidos y se incluyen en la suma. El backend existente ya divide el dato NASA entre 1000; el frontend no vuelve a convertirlo.
@@ -78,3 +78,7 @@ node --test tests/factibilidad.test.mjs
 Las pruebas de Node requieren Node 24 (o una versión con soporte para ejecutar TypeScript sin transformación). Cubren agregación horaria, precios negativos, año bisiesto, datos faltantes, duplicados y geometría.
 
 También se verificó en Edge con datos simulados de 2024: 8784 horas, paginación de 500 registros por respuesta, filtros independientes, ROI estable, diagrama reactivo, invalidación al cambiar el año y descarga del PDF de tres páginas. La prueba no valida la cobertura de datos de un nodo real.
+
+El tipo de cambio se consulta inicialmente desde la API y se puede editar en el formulario. El estado del campo es la única fuente para el costo, el retorno y el PDF. Una respuesta tardía no sobrescribe una edición manual; una consulta fallida conserva el valor anterior. El botón Actualizar desde API permite recuperar la cotización. Los valores vacíos, cero o negativos no habilitan resultados financieros.
+
+La gráfica extra del paso 5 muestra la semana de lunes a domingo que contiene el día con mayor generación total del año. Se calcula sumando las horas de cada día y se habilita con cobertura anual completa. En empates elige la fecha más temprana. Los días del año vecino se representan sin datos. Es independiente de los filtros mensuales y del ROI.

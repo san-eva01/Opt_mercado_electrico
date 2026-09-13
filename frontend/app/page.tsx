@@ -5,10 +5,10 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, BarChart, Bar
+  Tooltip, ResponsiveContainer, BarChart, Bar, Cell
 } from "recharts";
 import { supabase } from "../lib/supabase";
-import { MESES, MESES_CORTOS, unirDatosAnuales, agruparMeses, agruparDias, calcularSeparacion } from "../lib/factibilidad";
+import { MESES, MESES_CORTOS, unirDatosAnuales, agruparMeses, agruparDias, calcularSeparacion, obtenerSemanaMaxima } from "../lib/factibilidad";
 import type { DatoAnual, DatoMensual, DatoDiario, PrecioHorario } from "../lib/factibilidad";
 
 const DiagramaPaneles = dynamic(() => import("../components/DiagramaPaneles"), { ssr: false });
@@ -268,15 +268,28 @@ export default function Home() {
 
   //obtener tipo de cambio de usd en internet
   const fetchTipoCambio = async () => {
+    const solicitud = ++solicitudTipoCambio.current;
+    const revision = revisionTipoCambio.current;
     setLoadingTipoCambio(true);
+    setErrorTipoCambio(null);
     try {
       const res = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
+      if (!res.ok) throw new Error("No se pudo consultar el tipo de cambio.");
       const data = await res.json();
-      setTipoCambio(data.rates.MXN);
+      const valor: unknown = data?.rates?.MXN;
+      if (typeof valor !== "number" || !Number.isFinite(valor) || valor <= 0) {
+        throw new Error("La API devolvió un tipo de cambio inválido.");
+      }
+      // Una respuesta tardía nunca reemplaza lo que el usuario acaba de escribir.
+      if (solicitud === solicitudTipoCambio.current && revision === revisionTipoCambio.current) {
+        setTipoCambio(valor);
+      }
     } catch {
-      setTipoCambio(null);
+      if (solicitud === solicitudTipoCambio.current && revision === revisionTipoCambio.current) {
+        setErrorTipoCambio("No se pudo actualizar desde la API. Puedes ingresar el valor manualmente.");
+      }
     } finally {
-      setLoadingTipoCambio(false);
+      if (solicitud === solicitudTipoCambio.current) setLoadingTipoCambio(false);
     }
   };
 
@@ -385,6 +398,9 @@ export default function Home() {
   const [eficiencia, setEficiencia] = useState<number | "">(0.8); // Eficiencia como factor: 0.8 equivale a 80%.
   const [tipoCambio, setTipoCambio] = useState<number | null>(null);
   const [loadingTipoCambio, setLoadingTipoCambio] = useState(false);
+  const [errorTipoCambio, setErrorTipoCambio] = useState<string | null>(null);
+  const revisionTipoCambio = useRef(0);
+  const solicitudTipoCambio = useRef(0);
   const [alturaPanel, setAlturaPanel] = useState<number>(1.0);
   const [mesSeleccionadoGeneracion, setMesSeleccionadoGeneracion] = useState<number | null>(null);
   const [mesSeleccionadoIngreso, setMesSeleccionadoIngreso] = useState<number | null>(null);
@@ -567,12 +583,14 @@ export default function Home() {
   const datosIngresoDiario = useMemo<DatoDiario[]>(() => agruparDias(datosFactibilidadAnual, mesSeleccionadoIngreso, targetYear), [datosFactibilidadAnual, mesSeleccionadoIngreso, targetYear]);
   const horasEsperadas = (Date.UTC(targetYear + 1, 0, 1) - Date.UTC(targetYear, 0, 1)) / 3600000;
   const coberturaCompleta = datosFactibilidadAnual.length === horasEsperadas;
+  const semanaMaxima = useMemo(() => coberturaCompleta ? obtenerSemanaMaxima(datosFactibilidadAnual) : null, [coberturaCompleta, datosFactibilidadAnual]);
 
   const calculos = useMemo<{ costoInstalacion: string; ingresoAnual: string; anosRetorno: string; tipoCambio: string } | null>(() => {
     if (!coberturaCompleta || capacidad === "" || eficiencia === "" || !tipoCambio || !Number.isFinite(tipoCambio) || tipoCambio <= 0) return null;
-    const costoInstalacion = (capacidad * 1000) * eficiencia * tipoCambio;
+    const costoPorW_USD = 0.8; // Costo unitario fijo; capacidad en kW se convierte a W.
+    const costoInstalacion = capacidad * 1000 * costoPorW_USD * tipoCambio;
     const anosRetorno = ingresoTotalAnual > 0 ? costoInstalacion / ingresoTotalAnual : null;
-    return { costoInstalacion: costoInstalacion.toFixed(2), ingresoAnual: ingresoTotalAnual.toFixed(2), anosRetorno: anosRetorno === null ? "Sin retorno" : anosRetorno.toFixed(anosRetorno > 0 && anosRetorno < 0.1 ? 4 : 1), tipoCambio: tipoCambio.toFixed(2) };
+    return { costoInstalacion: costoInstalacion.toFixed(2), ingresoAnual: ingresoTotalAnual.toFixed(2), anosRetorno: anosRetorno === null ? "Sin retorno" : anosRetorno.toFixed(anosRetorno > 0 && anosRetorno < 0.1 ? 4 : 1), tipoCambio: String(tipoCambio) };
   }, [coberturaCompleta, capacidad, eficiencia, tipoCambio, ingresoTotalAnual]);
 
   const { orientation, tiltAnual, tiltVerano, tiltInvierno, tiltPromedio } = useMemo(() => {
@@ -1485,13 +1503,31 @@ export default function Home() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-gray-400">Tipo de cambio (MXN/USD)</label>
-                  <div className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-600 flex items-center justify-between">
-                    <span>{loadingTipoCambio ? "Consultando..." : tipoCambio ? `$${tipoCambio.toFixed(2)}` : "No disponible"}</span>
-                    <button onClick={fetchTipoCambio} className="text-xs text-amber-500 hover:underline">
-                      Actualizar
+                  <label htmlFor="tipo-cambio" className="text-xs text-gray-400">Tipo de cambio (MXN/USD)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="tipo-cambio"
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={tipoCambio ?? ""}
+                      placeholder={loadingTipoCambio ? "Consultando..." : "Ej. 18.50"}
+                      aria-describedby="tipo-cambio-ayuda"
+                      aria-invalid={tipoCambio !== null && tipoCambio <= 0}
+                      onChange={(e) => {
+                        revisionTipoCambio.current += 1;
+                        const valor = e.target.valueAsNumber;
+                        setTipoCambio(Number.isFinite(valor) ? valor : null);
+                        setErrorTipoCambio(null);
+                      }}
+                      className="w-full min-w-0 border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-amber-400"
+                    />
+                    <button type="button" onClick={fetchTipoCambio} disabled={loadingTipoCambio} className="shrink-0 text-xs text-amber-500 hover:underline disabled:opacity-40">
+                      {loadingTipoCambio ? "Consultando..." : "Actualizar desde API"}
                     </button>
                   </div>
+                  <p id="tipo-cambio-ayuda" className="text-xs text-gray-500">Se usará este valor en los cálculos y el PDF. Debe ser mayor que cero.</p>
+                  {errorTipoCambio && <p role="status" className="text-xs text-amber-700">{errorTipoCambio}</p>}
                 </div>
               </div>
 
@@ -1549,6 +1585,26 @@ export default function Home() {
                         )}
                       </div>
                     ))}
+                    {semanaMaxima && (
+                      <div id="grafica-semana-maxima" className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                        <h3 className="text-sm font-medium text-gray-700">Semana del día con mayor generación pronosticada · {targetYear}</h3>
+                        <p className="text-sm text-gray-600">Del {semanaMaxima.inicio} al {semanaMaxima.fin} (lunes a domingo).</p>
+                        <p className="text-sm text-amber-800">Máximo diario: <strong>{semanaMaxima.diaMaximo}</strong> · <strong>{semanaMaxima.generacionMaxima.toLocaleString("es-MX", { maximumFractionDigits: 2 })} kWh</strong></p>
+                        <ResponsiveContainer width="100%" height={280}>
+                          <BarChart data={semanaMaxima.dias} margin={{ top: 8, right: 16, left: 12, bottom: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="fecha" tickFormatter={(fecha: string) => fecha.slice(8, 10) + "/" + fecha.slice(5, 7)} interval={0} tick={{ fontSize: 11 }} />
+                            <YAxis width={75} tick={{ fontSize: 10 }} label={{ value: "kWh", angle: -90, position: "insideLeft" }} />
+                            <Tooltip formatter={(valor) => [Number(valor).toLocaleString("es-MX", { maximumFractionDigits: 2 }) + " kWh", "Generación diaria"]} />
+                            <Bar dataKey="generacion" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                              {semanaMaxima.dias.map((dia) => <Cell key={dia.fecha} fill={dia.fecha === semanaMaxima.diaMaximo ? "#b45309" : "#fbbf24"} />)}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                        <p className="text-xs text-gray-600">La barra oscura señala el día máximo. En caso de empate se muestra el primero del año.</p>
+                        {semanaMaxima.dias.some((dia) => dia.generacion === null) && <p className="text-xs text-gray-500">Los días fuera del año analizado se muestran sin datos.</p>}
+                      </div>
+                    )}
                     {calculos && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="rounded-xl border border-gray-100 bg-gray-50 p-4"><p className="text-xs text-gray-500">Costo de instalación (MXN)</p><p className="text-lg font-semibold">$ {calculos.costoInstalacion}</p></div>
@@ -2323,5 +2379,4 @@ function ColIrradiancia({
     </div>
   );
 }
-
 

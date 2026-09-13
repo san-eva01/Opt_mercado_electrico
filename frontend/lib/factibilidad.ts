@@ -92,3 +92,28 @@ export function calcularSeparacion(lat: number, alturaPanel: number, tiltAnual: 
   const d = alturaPanel * Math.sin(HRad + betaRad) / Math.sin(HRad);
   return { H, d };
 }
+
+export interface SemanaMaxima {
+  diaMaximo: string;
+  generacionMaxima: number;
+  inicio: string;
+  fin: string;
+  dias: { fecha: string; generacion: number | null }[];
+}
+
+export function obtenerSemanaMaxima(datos: DatoAnual[]): SemanaMaxima | null {
+  if (!datos.length) return null;
+  const totales = new Map<string, number>();
+  for (const row of datos) totales.set(row.fecha, (totales.get(row.fecha) ?? 0) + row.generacion);
+  const ordenados = [...totales.entries()].sort(([a], [b]) => a.localeCompare(b));
+  // Comparar totales diarios, no la hora de mayor producción ni el total semanal.
+  const [diaMaximo, generacionMaxima] = ordenados.reduce((maximo, dia) => dia[1] > maximo[1] ? dia : maximo);
+  const lunes = new Date(diaMaximo + 'T00:00:00Z');
+  lunes.setUTCDate(lunes.getUTCDate() - (lunes.getUTCDay() + 6) % 7);
+  const dias = Array.from({ length: 7 }, (_, i) => {
+    const fecha = new Date(lunes.getTime() + i * 86400000).toISOString().slice(0, 10);
+    // Los días del año vecino no se inventan como generación cero.
+    return { fecha, generacion: totales.get(fecha) ?? null };
+  });
+  return { diaMaximo, generacionMaxima, inicio: dias[0].fecha, fin: dias[6].fecha, dias };
+}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { unirDatosAnuales, agruparMeses, agruparDias, calcularSeparacion } from '../lib/factibilidad.ts';
+import { unirDatosAnuales, agruparMeses, agruparDias, calcularSeparacion, obtenerSemanaMaxima } from '../lib/factibilidad.ts';
 
 test('suma productos horarios, conserva precios negativos y no promedia por semana', () => {
   const solar = [
@@ -82,4 +82,30 @@ test('eficiencia decimal 0.8 produce 80% de generación sin una segunda divisió
   assert.throws(() => unirDatosAnuales(solar, precios, 2024, 4500, 80), /factor entre 0 y 1/);
   assert.equal(unirDatosAnuales(solar, precios, 2024, 4500, 0)[0].generacion, 0);
   assert.equal(unirDatosAnuales(solar, precios, 2024, 4500, 1)[0].generacion, 2250);
+});
+
+test('elige el máximo diario sumado y su semana lunes a domingo, cruzando mes', () => {
+  const rows = [
+    { fecha: '2024-05-01', generacion: 6 },
+    { fecha: '2024-04-29', generacion: 10 },
+    { fecha: '2024-05-01', generacion: 6 },
+    { fecha: '2024-05-02', generacion: 12 },
+  ];
+  const semana = obtenerSemanaMaxima(rows);
+  assert.equal(semana.diaMaximo, '2024-05-01');
+  assert.equal(semana.generacionMaxima, 12);
+  assert.equal(semana.inicio, '2024-04-29');
+  assert.equal(semana.fin, '2024-05-05');
+  assert.equal(semana.dias.length, 7);
+});
+
+test('semana del máximo respeta domingo, año vecino y ausencia de datos', () => {
+  assert.equal(obtenerSemanaMaxima([]), null);
+  const semana = obtenerSemanaMaxima([{fecha:'2023-01-01',generacion:0}]);
+  assert.equal(semana.inicio, '2022-12-26');
+  assert.equal(semana.fin, '2023-01-01');
+  assert.equal(semana.dias[0].generacion, null);
+  assert.equal(semana.dias[6].generacion, 0);
+  const fin = obtenerSemanaMaxima([{fecha:'2024-12-31',generacion:10}]);
+  assert.equal(fin.fin, '2025-01-05');
 });
