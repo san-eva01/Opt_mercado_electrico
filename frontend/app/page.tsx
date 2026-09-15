@@ -1568,6 +1568,18 @@ export default function Home() {
                               <Bar dataKey={grafica.key} fill={grafica.color} radius={[4, 4, 0, 0]} isAnimationActive={false} />
                             </BarChart>
                           </ResponsiveContainer>
+                          <div className="mt-3 border-t border-gray-200 pt-4" aria-live="polite">
+                            <p className="text-sm text-gray-600">
+                              {grafica.key === "generacion" ? "Generación pronosticada anual" : "Ingreso pronosticado anual"} · {targetYear}
+                              {!coberturaCompleta && " (total parcial disponible)"}
+                            </p>
+                            <p className={"mt-1 text-2xl font-semibold tabular-nums " + (grafica.key === "generacion" ? "text-amber-700" : "text-blue-700")}>
+                              {grafica.key === "generacion"
+                                ? generacionTotalAnual.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kWh"
+                                : ingresoTotalAnual.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " MXN"}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">{coberturaCompleta ? "Suma de los 12 meses del año." : "Suma de las horas disponibles; faltan datos para completar el año."}</p>
+                          </div>
                         </div>
                         {grafica.mes !== null && (
                           <div className="rounded-xl border border-gray-100 p-4">
