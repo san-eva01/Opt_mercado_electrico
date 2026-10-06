@@ -1,0 +1,454 @@
+/* Opening de bienvenida: fondo naranja → secuencia tipográfica → pantalla dividida.
+   La división se controla con dos variables: --cut-r (franja blanca a la derecha)
+   y --cut-b (franja blanca abajo). Solo una de ellas es distinta de cero. */
+
+.opening {
+  --orange: #f7931e;
+  --ink: #171717;
+  --ease-io: cubic-bezier(0.76, 0, 0.24, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --cut-r: 0%;
+  --cut-b: 44%;
+
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  overflow: hidden;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: var(--font-geist-sans), "Segoe UI", sans-serif;
+  transition: transform 0.85s var(--ease-io);
+}
+
+/* Tablet vertical: más espacio naranja, los botones siguen cómodos abajo. */
+@media (min-width: 640px) {
+  .opening { --cut-b: 36%; }
+}
+
+/* Teléfono o tablet en horizontal: la franja blanca pasa a la derecha. */
+@media (orientation: landscape) and (min-width: 640px) {
+  .opening { --cut-r: 40%; --cut-b: 0%; }
+}
+
+/* Escritorio: proporción 3 : 1 (algo más de blanco en pantallas de 1024 px). */
+@media (min-width: 1024px) and (orientation: landscape), (min-width: 1200px) {
+  .opening { --cut-r: 30%; --cut-b: 0%; }
+}
+
+@media (min-width: 1280px) {
+  .opening { --cut-r: 25%; --cut-b: 0%; }
+}
+
+.isLeaving {
+  transform: translateY(-100%);
+}
+
+/* ── Capa naranja ── */
+
+.orange {
+  position: absolute;
+  inset: 0;
+  background: var(--orange);
+  clip-path: inset(0 0 0 0);
+  transition: clip-path 1s var(--ease-io);
+}
+
+.isSplit .orange {
+  clip-path: inset(0 var(--cut-r) var(--cut-b) 0);
+}
+
+/* ── Escenario tipográfico (sigue a la región naranja) ── */
+
+.stage {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  transition: right 1s var(--ease-io), bottom 1s var(--ease-io);
+}
+
+.isSplit .stage {
+  right: var(--cut-r);
+  bottom: var(--cut-b);
+}
+
+.brand {
+  position: absolute;
+  top: clamp(16px, 4cqh, 32px);
+  left: clamp(16px, 4cqw, 40px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  animation: fadeIn 0.8s 0.2s var(--ease-out) forwards;
+}
+
+.brandMark {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--orange);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+}
+
+/* Sol que asciende lentamente detrás de las palabras. */
+.sun {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: min(130cqw, 150cqh);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.07) 45%, rgba(255, 255, 255, 0) 70%);
+  transform: translate(-50%, 78%);
+  animation: sunRise 5.5s var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+.sun::after {
+  content: "";
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.words {
+  --L: 1.24em;
+  position: relative;
+  font-size: clamp(2rem, min(11cqw, 17cqh), 10rem);
+  font-weight: 800;
+  line-height: var(--L);
+  letter-spacing: -0.035em;
+}
+
+.window {
+  display: block;
+  height: var(--L);
+  overflow: hidden;
+  transition: height 1s var(--ease-io);
+}
+
+.isSplit .window {
+  display: block;
+  height: calc(var(--L) * 3);
+}
+
+.reel {
+  display: block;
+  transform: translateY(calc(var(--step) * var(--L) * -1));
+  transition: transform 0.6s var(--ease-io);
+}
+
+.isSplit .reel {
+  display: block;
+  transform: translateY(0);
+}
+
+.line {
+  display: flex;
+  justify-content: center;
+  height: var(--L);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.char {
+  display: inline-block;
+  transform: translateY(105%);
+  will-change: transform;
+}
+
+.lineActive .char {
+  animation: charIn 0.6s var(--ease-out) forwards;
+  animation-delay: calc(var(--i) * 30ms);
+}
+
+.caption {
+  margin-top: clamp(12px, 3cqh, 28px);
+  font-size: clamp(10px, 1.6cqw, 13px);
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 0 16px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
+}
+
+.isSplit .caption {
+  opacity: 0.85;
+  transform: none;
+  transition-delay: 0.7s;
+}
+
+/* Progreso de la secuencia: tres segmentos que se llenan. */
+.progress {
+  position: absolute;
+  bottom: clamp(24px, 7cqh, 56px);
+  left: 50%;
+  display: flex;
+  gap: 6px;
+  transform: translateX(-50%);
+  transition: opacity 0.4s ease;
+}
+
+.isSplit .progress {
+  opacity: 0;
+}
+
+.segment {
+  width: 36px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+}
+
+.segment::after {
+  content: "";
+  display: block;
+  height: 100%;
+  background: #ffffff;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.9s linear;
+}
+
+.segmentOn::after {
+  transform: scaleX(1);
+}
+
+.skip {
+  position: absolute;
+  right: clamp(16px, 4cqw, 40px);
+  bottom: clamp(16px, 5cqh, 44px);
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 4px;
+  transition: opacity 0.3s ease, color 0.2s ease;
+}
+
+.skip:hover { color: #ffffff; }
+.skip:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; border-radius: 4px; }
+
+.isSplit .skip {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Panel blanco: "Comencemos:" ── */
+
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--cut-b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px clamp(20px, 6vw, 48px);
+}
+
+@media (orientation: landscape) and (min-width: 640px) {
+  .panel {
+    top: 0;
+    left: auto;
+    height: auto;
+    width: var(--cut-r);
+  }
+}
+
+@media (min-width: 1024px) and (orientation: landscape), (min-width: 1200px) {
+  .panel {
+    top: 0;
+    left: auto;
+    height: auto;
+    width: var(--cut-r);
+    padding: 32px clamp(20px, 2.4vw, 44px);
+  }
+}
+
+.panelInner {
+  width: 100%;
+  max-width: 420px;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
+}
+
+.isReady .reveal {
+  opacity: 1;
+  transform: none;
+  transition-delay: calc(var(--d) * 90ms);
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #c2410c;
+}
+
+.title {
+  margin-top: 8px;
+  font-size: clamp(1.6rem, 2.6vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.choices {
+  margin-top: clamp(16px, 3.5vh, 32px);
+  display: grid;
+  gap: 10px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid #e5e5e5;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+.choice:hover {
+  border-color: var(--orange);
+}
+
+.choice:active {
+  transform: scale(0.99);
+}
+
+.choice:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+.choicePrimary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+
+.choicePrimary:hover {
+  background: #000000;
+  border-color: var(--orange);
+}
+
+.choiceLabel {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.choiceHint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.choiceArrow {
+  flex-shrink: 0;
+  font-size: 18px;
+  transition: transform 0.25s var(--ease-out);
+}
+
+.choice:hover .choiceArrow {
+  transform: translateX(3px);
+}
+
+/* ── Modal y recorrido ── */
+
+.backdropIn {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.dialogIn {
+  animation: dialogIn 0.45s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+}
+
+.popIn {
+  animation: popIn 0.18s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes charIn {
+  from { transform: translateY(105%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes sunRise {
+  to { transform: translate(-50%, 46%); }
+}
+
+@keyframes dialogIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opening,
+  .orange,
+  .stage,
+  .window,
+  .reel,
+  .reveal,
+  .caption {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .char,
+  .lineActive .char {
+    animation: none;
+    transform: none;
+  }
+
+  .sun,
+  .brand,
+  .backdropIn,
+  .dialogIn,
+  .popIn {
+    animation-duration: 0.01ms;
+  }
+}

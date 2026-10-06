@@ -62,7 +62,7 @@ export default function DiagramaPaneles({ beta, gammaSolar, d, b }: DiagramaPane
         </g>
       ))}
       <path d={arc(x2, gammaSolar, 47, true)} fill="none" stroke="#c65c00" strokeWidth="1.5" />
-      <text x={x2 - 110} y={ground - 18} fontSize="13" fill="#9a4500">γs = {gammaSolar.toFixed(1)}°</text>
+      <text x={x2 - 160} y={ground - 8} fontSize="13" fill="#9a4500">γs = {gammaSolar.toFixed(1)}°</text>
       <g stroke="#334155" strokeWidth="1.3" markerStart={`url(#${id}-arrow)`} markerEnd={`url(#${id}-arrow)`}>
         <line x1={x1} x2={x2} y1="355" y2="355" />
         <line x1={x2 + dx + 22} x2={x2 + dx + 22} y1={ground - Math.max(dy, 10)} y2={ground} />

@@ -11,6 +11,10 @@ import { supabase } from "../lib/supabase";
 import { MESES, MESES_CORTOS, unirDatosAnuales, agruparMeses, agruparDias, calcularSeparacion, obtenerSemanaMaxima } from "../lib/factibilidad";
 import type { DatoAnual, DatoMensual, DatoDiario, PrecioHorario } from "../lib/factibilidad";
 
+import Onboarding from "../components/onboarding/Onboarding";
+import { BotonAyudaVista, InfoTip } from "../components/onboarding/Ayuda";
+import { AYUDA_SECCIONES } from "../components/onboarding/contenido";
+
 const DiagramaPaneles = dynamic(() => import("../components/DiagramaPaneles"), { ssr: false });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,7 +54,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type Vista = "normal" | "graficas" | "comparar-nodos" | "comparar-irradiancia";
 
+// Opening y onboarding opcional antes del programa; el programa no cambia.
 export default function Home() {
+  return (
+    <Onboarding>
+      <Programa />
+    </Onboarding>
+  );
+}
+
+function Programa() {
 
 
 
@@ -998,11 +1011,14 @@ export default function Home() {
 
         {/* Botones derecha */}
         <div className="flex items-center gap-2">
-          <NavBtn label="Vista normal" value="normal" vista={vista} setVista={setVista} />
+          <div className="flex items-center gap-2" data-tour="vistas">
+            <NavBtn label="Vista normal" value="normal" vista={vista} setVista={setVista} />
 
-          <NavBtn label="Ver solo gráficas" value="graficas" vista={vista} setVista={setVista} />
-          <NavBtn label="Comparar nodos" value="comparar-nodos" vista={vista} setVista={setVista} />
-          <NavBtn label="Comparar irradiancia" value="comparar-irradiancia" vista={vista} setVista={setVista} />
+            <NavBtn label="Ver solo gráficas" value="graficas" vista={vista} setVista={setVista} />
+            <NavBtn label="Comparar nodos" value="comparar-nodos" vista={vista} setVista={setVista} />
+            <NavBtn label="Comparar irradiancia" value="comparar-irradiancia" vista={vista} setVista={setVista} />
+          </div>
+          <BotonAyudaVista vista={vista} onIrAVistaNormal={() => setVista("normal")} />
           {/*<a
             href="/factibilidad"
             className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-amber-400 hover:text-amber-500 transition-colors"
@@ -1030,10 +1046,10 @@ export default function Home() {
 
                 {/* ── Sección de ubicación ── */}
                 <div className="space-y-4">
-                  <SectionLabel number="1" label="Ubicación" />
+                  <SectionLabel number="1" label="Ubicación" ayuda={AYUDA_SECCIONES.ubicacion} />
 
                   {/* Estado y Municipio */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-tour="ubicacion">
                     <div className="space-y-1">
                       <label className="text-xs text-gray-400">Estado</label>
                       <select
@@ -1060,8 +1076,8 @@ export default function Home() {
                   </div>
 
                   {/* ── Sección de período ── */}
-                  <div className="space-y-3">
-                    <SectionLabel number="2" label="Período de tiempo" />
+                  <div className="space-y-3" data-tour="periodo">
+                    <SectionLabel number="2" label="Período de tiempo" ayuda={AYUDA_SECCIONES.periodo} />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="text-xs text-gray-400">Fecha inicio</label>
@@ -1142,7 +1158,7 @@ export default function Home() {
                   </div>
 
                   {/* Mapa */}
-                  <div className="relative rounded-xl border border-gray-200 overflow-hidden h-[380px]">
+                  <div className="relative rounded-xl border border-gray-200 overflow-hidden h-[380px]" data-tour="mapa">
                     <MapSelector
                       onLocationSelect={handleMapClick}
                       lat={lat}
@@ -1167,7 +1183,7 @@ export default function Home() {
 
 
                 {/* Resumen y botón */}
-                <div className="space-y-3">
+                <div className="space-y-3" data-tour="consultar-irradiancia">
                   <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
                     <InfoCell label="Latitud" value={lat ? `${lat}°` : "—"} />
                     <InfoCell label="Longitud" value={lon ? `${lon}°` : "—"} />
@@ -1290,11 +1306,12 @@ export default function Home() {
 
 
               {/* COLUMNA DE PRECIOS AQUI LA BORRAS SI NO CHARCHA — Precios */}
-              <div className="space-y-6">
+              <div className="space-y-6" data-tour="nodo">
                 {/*titulo*/}
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-amber-400">3</span>
                   <span className="text-sm font-medium text-gray-700">Selección de nodo</span>
+                  <InfoTip titulo="Selección de nodo" texto={AYUDA_SECCIONES.nodo} />
                 </div>
 
                 {!municipio ? (
@@ -1476,9 +1493,9 @@ export default function Home() {
 
             {/* ── 04 Características del sistema ── */}
             <div className="border-t border-gray-100 pt-8 space-y-6">
-              <SectionLabel number="4" label="Características del sistema fotovoltaico" />
+              <SectionLabel number="4" label="Características del sistema fotovoltaico" ayuda={AYUDA_SECCIONES.sistema} />
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-4" data-tour="sistema">
                 <div className="space-y-1">
                   <label className="text-xs text-gray-400">Capacidad instalada (kW)</label>
                   <input
@@ -1531,8 +1548,8 @@ export default function Home() {
                 </div>
               </div>
 
-              <section className="border-t border-gray-100 pt-8 space-y-6">
-                <SectionLabel number="5" label="Generación e ingresos mensuales" />
+              <section className="border-t border-gray-100 pt-8 space-y-6" data-tour="anual">
+                <SectionLabel number="5" label="Generación e ingresos mensuales" ayuda={AYUDA_SECCIONES.anual} />
                 <p className="text-sm text-gray-500">El análisis usa irradiancia y precios MDA del 1 de enero al 31 de diciembre del año de inicio, independientemente del rango de las consultas anteriores.</p>
                 <button onClick={fetchFactibilidadAnual} disabled={loadingAnual || lat === null || lon === null || !inicioAnual || !nodo}
                   className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-medium text-white disabled:opacity-40">
@@ -1628,8 +1645,8 @@ export default function Home() {
                 )}
               </section>
 
-              <section className="border-t border-gray-100 pt-8 space-y-4">
-                <SectionLabel number="6" label="Inclinación y orientación de los paneles" />
+              <section className="border-t border-gray-100 pt-8 space-y-4" data-tour="inclinacion">
+                <SectionLabel number="6" label="Inclinación y orientación de los paneles" ayuda={AYUDA_SECCIONES.inclinacion} />
                 {lat === null ? <p className="text-sm text-gray-500">Selecciona una ubicación en el paso 1.</p> : (
                   <>
                     <dl className="grid sm:grid-cols-2 gap-4 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm">
@@ -1640,8 +1657,8 @@ export default function Home() {
                 )}
               </section>
 
-              <section className="border-t border-gray-100 pt-8 space-y-4">
-                <SectionLabel number="7" label="Distancia mínima entre hileras de paneles" />
+              <section className="border-t border-gray-100 pt-8 space-y-4" data-tour="distancia">
+                <SectionLabel number="7" label="Distancia mínima entre hileras de paneles" ayuda={AYUDA_SECCIONES.distancia} />
                 <label htmlFor="altura-panel" className="block text-sm text-gray-600">Altura del panel (m)</label>
                 <input id="altura-panel" type="number" min={0.1} step={0.1} value={alturaPanel} onChange={(e) => {
                   const value = e.target.valueAsNumber;
@@ -1660,7 +1677,7 @@ export default function Home() {
               </section>
 
               <section className="border-t border-gray-100 pt-8 space-y-4">
-                <SectionLabel number="8" label="¿Por qué considerar pérdidas del sistema?" />
+                <SectionLabel number="8" label="¿Por qué considerar pérdidas del sistema?" ayuda={AYUDA_SECCIONES.perdidas} />
                 <p className="text-sm text-gray-500">La energía aprovechable se reduce por pérdidas del sistema. La eficiencia representa el factor global de rendimiento; los siguientes valores típicos ilustran las pérdidas que pueden afectar la producción.</p>
                 <div className="overflow-x-auto rounded-xl border border-gray-200">
                   <table className="w-full text-left text-sm">
@@ -1954,11 +1971,12 @@ export default function Home() {
   );
 }
 
-function SectionLabel({ number, label }: { number: string; label: string }) {
+function SectionLabel({ number, label, ayuda }: { number: string; label: string; ayuda?: string }) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs font-medium text-amber-400">{number}</span>
       <span className="text-sm font-medium text-gray-700">{label}</span>
+      {ayuda && <InfoTip titulo={label} texto={ayuda} />}
     </div>
   );
 }
